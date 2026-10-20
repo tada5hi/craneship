@@ -48,6 +48,9 @@ compute them:
 The image is built **once** under a local id derived from the ref, then tagged and pushed for each
 resulting reference. A ref which has already been built during the same job is not rebuilt.
 
+With [`platforms`](#multi-platform-images) set, the image is instead built once with `docker buildx`
+for every platform and pushed under every reference straight from that build.
+
 ## Usage
 
 ```yaml
@@ -209,6 +212,41 @@ A `registryTag` starting with `sha` is attached as a digest rather than a tag:
 
 With `gitTag: 'false'` a tag ref no longer contributes an image tag, so only `registryTag` is used.
 
+### Multi-platform images
+
+```yaml
+-   uses: actions/checkout@v4
+
+-   uses: tada5hi/craneship@v4
+    with:
+        dockerFilePath: 'images/sandbox-node'
+        registryRepository: 'chamberu/sandbox-node'
+        registryTag: |
+            24
+            24-${{ github.sha }}
+        platforms: 'linux/amd64,linux/arm64'
+```
+
+`platforms` is comma or newline separated. When it is set:
+
+- The action registers **QEMU** emulators for the requested platforms
+  ([`docker/setup-qemu-action`](https://github.com/docker/setup-qemu-action)), so `RUN` steps of a
+  foreign platform execute on the runner.
+- The image is built with **`docker buildx build --platform ... --push`**, once, with every derived
+  tag. A multi-platform image cannot be loaded into the local daemon, so there is no separate tag and
+  push step and no local image is left behind.
+- If the current buildx builder uses the `docker` driver, which cannot hold a multi-platform image, a
+  `docker-container` builder named `craneship` is created (or reused, when an earlier step left one
+  behind) and passed with `--builder`. It is never made the current builder, so later steps are not
+  affected. Any other current builder (e.g. one from `docker/setup-buildx-action`) is used as is.
+- `cleanup` removes the `craneship` builder again, with its build cache, but only when this run
+  created it. Set `cleanup: 'false'` to keep it, and its cache, for a later build in the same job.
+- A ref which derives no tag (e.g. a git tag not matching `gitTagPrefix`) skips the build entirely.
+
+Without `platforms` nothing changes: the image is built with a plain `docker build`, then tagged and
+pushed. Outside GitHub Actions the CLI expects `docker buildx` to be available and, for foreign
+platforms, QEMU to be registered already (`docker run --privileged --rm tonistiigi/binfmt --install all`).
+
 ### Keep the built image for later steps
 
 ```yaml
@@ -219,7 +257,8 @@ With `gitTag: 'false'` a tag ref no longer contributes an image tag, so only `re
 -   run: docker images
 ```
 
-By default the locally built image is removed once every tag has been pushed.
+By default the locally built image is removed once every tag has been pushed. A multi-platform build
+leaves no local image, see [Multi-platform images](#multi-platform-images).
 
 ### Clone a private repository
 
@@ -259,8 +298,9 @@ An empty `node-version` skips the action's own `setup-node` step.
 | `dockerFileName`     | Name of the Dockerfile                                            | `Dockerfile`               |
 | `dockerFilePath`     | Relative path to the Dockerfile                                   | `''`                       |
 | `buildArgs`          | Additional build args (`KEY=VALUE`), one per line                 | `''`                       |
-| `cleanup`            | Delete the built image at the end                                 | `true`                     |
+| `cleanup`            | Delete the built image, or the created builder, at the end        | `true`                     |
 | `clone`              | Clone the repo at the ref instead of building the workspace       | `false`                    |
+| `platforms`          | Platforms to build with buildx (e.g. `linux/amd64,linux/arm64`)   | `''`                       |
 | `gitTag`             | Create an image tag for a git tag                                 | `true`                     |
 | `gitTagPrefix`       | Only match git tags with this prefix                              | `''`                       |
 | `gitUser`            | User for cloning the repository                                   | `${{ github.actor }}`      |
@@ -309,6 +349,7 @@ npx craneship \
 Every flag defaults to the corresponding `GITHUB_*` environment variable (`GITHUB_REF`,
 `GITHUB_REPOSITORY`, `GITHUB_ACTOR`, `GITHUB_TOKEN`, …), so inside a workflow no flags are required.
 Boolean flags are negated with `--no-` (e.g. `--no-cleanup`, `--no-gitTag`).
+`--platforms linux/amd64,linux/arm64` switches to a [multi-platform build](#multi-platform-images).
 
 `--clone` is usually what you want outside a workflow: without it the CLI builds the current working
 directory, with it the repository is cloned at `--ref` into `.output` and built from there.

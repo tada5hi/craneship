@@ -25,6 +25,11 @@ export interface IDockerClient {
     tagImage(source: string, target: string) : Promise<void>;
     pushImage(image: string) : Promise<void>;
     removeImage(image: string) : Promise<void>;
+
+    // multi-platform builds (docker buildx)
+    ensureMultiPlatformBuilder() : Promise<MultiPlatformBuilder>;
+    removeBuilder(name: string) : Promise<void>;
+    buildAndPushImage(options: MultiPlatformBuildOptions) : Promise<void>;
 }
 ```
 
@@ -99,7 +104,9 @@ Options ──► parseGitHubRef(options.ref)
                 │
                 ▼
             imageId = md5(ref)     the same ref always maps to the same local id
+            images = derive tags   see Tag derivation below
                 │
+                ├─ platforms set ──► multi-platform flow (below)
                 ▼
             docker.imageExists(imageId)
                 │
@@ -108,13 +115,7 @@ Options ──► parseGitHubRef(options.ref)
                 ├─ not exists ──► docker.buildImage()   once, with runId/runNumber labels
                 │
                 ▼
-            derive tags ──────────────────────────────────┐
-                │                                          │
-                │  gitTag && ref is a tag && prefix match  │ -> trimRefName(ref.value, prefix)
-                │  ref is not a tag, or !gitTag,           │ -> ...options.registryTags
-                │  or registryTags is non-empty            │
-                ▼                                          │
-            for each tag: ◄────────────────────────────────┘
+            for each image:
                 docker.tagImage(imageId, image)
                 docker.pushImage(image)
                 docker.removeImage(image)      the remote tag only, not the built image
@@ -127,6 +128,30 @@ Options ──► parseGitHubRef(options.ref)
 ```
 
 `docker.logout()` sits in a `finally`, so a failed build or push still tears down the registry session.
+
+### Multi-platform flow
+
+With `options.platforms` non-empty (`platforms` input, `--platforms`, comma or newline separated via `toList`), `publish()` takes a separate branch, `publishMultiPlatform()`:
+
+```
+images empty ? return (built: false)   buildx refuses --push without a tag
+    │
+docker.login()
+    │
+docker.ensureMultiPlatformBuilder()    { name?, created }
+    │
+docker.buildAndPushImage({ images, platforms, builder, ... })
+    │                                  one `docker buildx build --platform a,b --tag x --tag y --push`
+    ▼ (finally)
+cleanup && created ? docker.removeBuilder(name) : keep
+    ▼ (finally)
+docker.logout()
+```
+
+- A multi-platform image cannot be loaded into the local daemon, so the build-once-then-tag-and-push flow does not apply: there is no `imageExists` short-cut, no `tagImage`/`pushImage`, and no local image to remove. `result.imageId` is still `md5(ref)`, but nothing is tagged with it.
+- `DockerCLIClient.ensureMultiPlatformBuilder()` reads `docker buildx inspect`. Any driver other than `docker` is reused as is (its `Name`). With the `docker` driver it reuses a builder named `DOCKER_BUILDER_NAME` (`craneship`) or creates one (`buildx create --driver docker-container --bootstrap`). It never runs `buildx use`; the build selects it with `--builder`, so later steps of the job keep their builder. Only a non-zero exit of `buildx inspect craneship` counts as "missing"; a spawn failure rethrows.
+- `cleanup` removes only a builder this run created, so a builder left by an earlier step (`cleanup: false`) or by `docker/setup-buildx-action` survives.
+- QEMU is not the CLI's job: `action.yml` runs `docker/setup-qemu-action@v4` with the requested platforms before the Publish step, only when `platforms` is set. Outside Actions the user registers binfmt handlers.
 
 ## Tag derivation
 

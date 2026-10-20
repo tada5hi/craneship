@@ -22,6 +22,10 @@ inputs:
         description: 'Clone the repository at the ref instead of building the checked out workspace. Only needed when the workflow does not run actions/checkout.'
         required: false
         default: 'false'
+    platforms:
+        description: 'Target platforms (e.g. linux/amd64,linux/arm64), comma or newline separated. When set, the image is built with docker buildx and pushed straight from the build; QEMU is set up for foreign platforms.'
+        required: false
+        default: ''
     gitTag:
         description: 'Whether to create an image tag for a git tag.'
         required: false
@@ -90,6 +94,16 @@ runs:
             run: npm run build
             working-directory: ${{ github.action_path }}
 
+        # A foreign platform's RUN steps execute under QEMU emulation, which
+        # needs binfmt handlers registered on the runner. Only the requested
+        # platforms are installed (setup-qemu-action splits on commas and
+        # newlines, binfmt maps linux/arm64 to arm64).
+        -   name: Set up QEMU
+            if: inputs.platforms != ''
+            uses: docker/setup-qemu-action@v4
+            with:
+                platforms: ${{ inputs.platforms }}
+
         -   name: Publish
             shell: bash
             # Inputs travel through the environment instead of being interpolated
@@ -100,6 +114,7 @@ runs:
                 INPUT_BUILD_ARGS: ${{ inputs.buildArgs }}
                 INPUT_CLEANUP: ${{ inputs.cleanup }}
                 INPUT_CLONE: ${{ inputs.clone }}
+                INPUT_PLATFORMS: ${{ inputs.platforms }}
                 INPUT_GIT_TAG: ${{ inputs.gitTag }}
                 INPUT_GIT_TAG_PREFIX: ${{ inputs.gitTagPrefix }}
                 INPUT_GIT_USER: ${{ inputs.gitUser }}
@@ -117,6 +132,7 @@ runs:
                     --dockerFileName "$INPUT_DOCKER_FILE_NAME"
                     --dockerFilePath "$INPUT_DOCKER_FILE_PATH"
                     --buildArgs "$INPUT_BUILD_ARGS"
+                    --platforms "$INPUT_PLATFORMS"
                     --gitTagPrefix "$INPUT_GIT_TAG_PREFIX"
                     --gitUser "$INPUT_GIT_USER"
                     --gitPassword "$INPUT_GIT_PASSWORD"

@@ -42,6 +42,11 @@ export const PUBLISH_COMMAND_ARGS = {
         description: 'Clone the repository at the ref instead of building the working directory.',
         default: false,
     },
+    platforms: {
+        type: 'string',
+        description: 'Target platforms (e.g. linux/amd64,linux/arm64), comma or newline separated. Builds with docker buildx and pushes from the build.',
+        default: '',
+    },
     gitTag: {
         type: 'boolean',
         description: 'Create an image tag for a git tag.',

@@ -8,7 +8,9 @@
 import md5 from 'md5';
 import path from 'node:path';
 import { buildDockerImageURL } from './core/index.ts';
+import type { ImageBuildOptions } from './core/index.ts';
 import type {
+    GithubRef,
     Options,
     PublishContext,
     PublishResult,
@@ -21,15 +23,178 @@ import {
 
 const CLONE_DIRECTORY = '.output';
 
+type BuildInput = Omit<ImageBuildOptions, 'image'>;
+
+type PublishInput = {
+    imageId: string,
+
+    images: string[],
+
+    build: BuildInput
+};
+
+function deriveTags(options: Options, ref: GithubRef) : string[] {
+    const tags : string[] = [];
+
+    // an image tag derived from the git tag
+    if (
+        options.gitTag &&
+        ref.type === 'tag' &&
+        (
+            options.gitTagPrefix.length === 0 ||
+            ref.value.startsWith(options.gitTagPrefix)
+        )
+    ) {
+        tags.push(trimRefName(ref.value, options.gitTagPrefix));
+    }
+
+    // the explicitly requested image tags
+    if (
+        ref.type !== 'tag' ||
+        !options.gitTag ||
+        options.registryTags.length > 0
+    ) {
+        tags.push(...options.registryTags);
+    }
+
+    return tags;
+}
+
+/**
+ * Build once with a plain docker build, then tag and push the local image
+ * under every reference.
+ */
+async function publishSinglePlatform(
+    options: Options,
+    context: PublishContext,
+    input: PublishInput,
+) : Promise<PublishResult> {
+    const { docker, logger } = context;
+    const {
+        imageId, 
+        images, 
+        build, 
+    } = input;
+
+    const imageExists = await docker.imageExists(imageId);
+
+    await docker.login({
+        host: options.registryHost,
+        user: options.registryUser,
+        password: options.registryPassword,
+    });
+
+    const result : PublishResult = {
+        imageId,
+        built: false,
+        images: [],
+    };
+
+    try {
+        if (!imageExists) {
+            logger.info('Image does not exist.');
+
+            await docker.buildImage({ ...build, image: imageId });
+
+            result.built = true;
+        }
+
+        for (const image of images) {
+            logger.info(`Tagging image ${imageId} with ${image}`);
+            await docker.tagImage(imageId, image);
+
+            logger.info(`Pushing image ${image}`);
+            await docker.pushImage(image);
+
+            await docker.removeImage(image);
+
+            result.images.push(image);
+        }
+
+        if (options.cleanup) {
+            logger.info('Deleting built image...');
+            await docker.removeImage(imageId);
+        }
+    } finally {
+        await docker.logout(options.registryHost);
+    }
+
+    return result;
+}
+
+/**
+ * Build for every platform with docker buildx and push every reference
+ * straight from that build. A multi-platform image cannot be loaded into
+ * the local daemon, so there is no local image to tag, push or remove.
+ */
+async function publishMultiPlatform(
+    options: Options,
+    context: PublishContext,
+    input: PublishInput & { platforms: string[] },
+) : Promise<PublishResult> {
+    const { docker, logger } = context;
+    const {
+        imageId,
+        images,
+        build,
+        platforms,
+    } = input;
+
+    const result : PublishResult = {
+        imageId,
+        built: false,
+        images: [],
+    };
+
+    // buildx refuses to push without a tag, and a build nobody can pull
+    // afterwards is wasted work
+    if (images.length === 0) {
+        logger.info('No image tag was derived from the ref, skipping the build.');
+
+        return result;
+    }
+
+    await docker.login({
+        host: options.registryHost,
+        user: options.registryUser,
+        password: options.registryPassword,
+    });
+
+    try {
+        const builder = await docker.ensureMultiPlatformBuilder();
+
+        try {
+            logger.info(`Building for ${platforms.join(', ')} and pushing ${images.join(', ')}`);
+
+            await docker.buildAndPushImage({
+                ...build,
+                images,
+                platforms,
+                ...(builder.name ? { builder: builder.name } : {}),
+            });
+
+            result.built = true;
+            result.images.push(...images);
+        } finally {
+            // cleanup removes what this run left behind: the builder it
+            // created (with its build cache), never one it found
+            if (options.cleanup && builder.created && builder.name) {
+                logger.info(`Removing builder ${builder.name}...`);
+                await docker.removeBuilder(builder.name);
+            }
+        }
+    } finally {
+        await docker.logout(options.registryHost);
+    }
+
+    return result;
+}
+
 export async function publish(
     options: Options,
     context: PublishContext,
 ) : Promise<PublishResult> {
-    const {
-        docker, 
-        git, 
-        logger, 
-    } = context;
+    const { git, logger } = context;
 
     logger.info('Booting...');
 
@@ -62,96 +227,48 @@ export async function publish(
     }
 
     const imageId = md5(options.ref);
-    const imageExists = await docker.imageExists(imageId);
 
-    await docker.login({
-        host: options.registryHost,
-        user: options.registryUser,
-        password: options.registryPassword,
-    });
+    const imageBase = cleanDoubleSlashes(
+        `${options.registryHost}/${options.registryRepository}`,
+    ).toLowerCase();
 
-    const result : PublishResult = {
-        imageId,
-        built: false,
-        images: [],
+    const images = deriveTags(options, ref)
+        .map((tag) => buildDockerImageURL(imageBase, tag));
+
+    let cwd = source;
+    if (options.dockerFilePath.length > 0) {
+        cwd = path.join(cwd, options.dockerFilePath);
+    }
+
+    const labels : Record<string, string> = {};
+    if (options.runId) {
+        labels.runId = options.runId;
+    }
+    if (options.runNumber) {
+        labels.runNumber = options.runNumber;
+    }
+
+    const build : BuildInput = {
+        fileName: options.dockerFileName,
+        cwd,
+        labels,
+        buildArgs: options.buildArgs,
     };
 
-    try {
-        if (!imageExists) {
-            logger.info('Image does not exist.');
+    const platforms = options.platforms ?? [];
 
-            let cwd = source;
-            if (options.dockerFilePath.length > 0) {
-                cwd = path.join(cwd, options.dockerFilePath);
-            }
-
-            const labels : Record<string, string> = {};
-            if (options.runId) {
-                labels.runId = options.runId;
-            }
-            if (options.runNumber) {
-                labels.runNumber = options.runNumber;
-            }
-
-            await docker.buildImage({
-                image: imageId,
-                fileName: options.dockerFileName,
-                cwd,
-                labels,
-                buildArgs: options.buildArgs,
-            });
-
-            result.built = true;
-        }
-
-        const imageBase = cleanDoubleSlashes(
-            `${options.registryHost}/${options.registryRepository}`,
-        ).toLowerCase();
-
-        const tags : string[] = [];
-
-        // an image tag derived from the git tag
-        if (
-            options.gitTag &&
-            ref.type === 'tag' &&
-            (
-                options.gitTagPrefix.length === 0 ||
-                ref.value.startsWith(options.gitTagPrefix)
-            )
-        ) {
-            tags.push(trimRefName(ref.value, options.gitTagPrefix));
-        }
-
-        // the explicitly requested image tags
-        if (
-            ref.type !== 'tag' ||
-            !options.gitTag ||
-            options.registryTags.length > 0
-        ) {
-            tags.push(...options.registryTags);
-        }
-
-        for (const tag of tags) {
-            const image = buildDockerImageURL(imageBase, tag);
-
-            logger.info(`Tagging image ${imageId} with ${image}`);
-            await docker.tagImage(imageId, image);
-
-            logger.info(`Pushing image ${image}`);
-            await docker.pushImage(image);
-
-            await docker.removeImage(image);
-
-            result.images.push(image);
-        }
-
-        if (options.cleanup) {
-            logger.info('Deleting built image...');
-            await docker.removeImage(imageId);
-        }
-    } finally {
-        await docker.logout(options.registryHost);
-    }
+    const result = platforms.length > 0 ?
+        await publishMultiPlatform(options, context, {
+            imageId,
+            images,
+            build,
+            platforms,
+        }) :
+        await publishSinglePlatform(options, context, {
+            imageId,
+            images,
+            build,
+        });
 
     logger.info('Finished.');
 

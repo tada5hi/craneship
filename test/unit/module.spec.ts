@@ -222,4 +222,145 @@ describe('src/module.ts', () => {
 
         expect(docker.builds[0]?.cwd).toBe('/workspace/.output/services/api');
     });
+
+    describe('multi-platform', () => {
+        const platforms = ['linux/amd64', 'linux/arm64'];
+
+        it('should keep the plain docker flow when no platforms are given', async () => {
+            const result = await publish(buildOptions({ platforms: [] }), context);
+
+            expect(docker.builds).toHaveLength(1);
+            expect(docker.multiPlatformBuilds).toHaveLength(0);
+            expect(docker.createdBuilders).toHaveLength(0);
+            expect(docker.removed).toEqual([
+                'ghcr.io/tada5hi/some-repo:latest',
+                result.imageId,
+            ]);
+        });
+
+        it('should build once for every platform and push every tag from that build', async () => {
+            const result = await publish(buildOptions({
+                dockerFilePath: 'images/sandbox-node',
+                registryRepository: 'chamberu/sandbox-node',
+                registryTags: ['24', '24-abc1234'],
+                platforms,
+            }), context);
+
+            expect(result.built).toBe(true);
+            expect(result.images).toEqual([
+                'ghcr.io/chamberu/sandbox-node:24',
+                'ghcr.io/chamberu/sandbox-node:24-abc1234',
+            ]);
+
+            // a multi-platform image cannot be loaded into the local daemon,
+            // so nothing is built, tagged or pushed the plain way
+            expect(docker.builds).toHaveLength(0);
+            expect(docker.multiPlatformBuilds).toHaveLength(1);
+            expect(docker.multiPlatformBuilds[0]).toMatchObject({
+                images: result.images,
+                platforms,
+                builder: 'craneship',
+                fileName: 'Dockerfile',
+                cwd: '/workspace/images/sandbox-node',
+            });
+            expect(docker.pushed).toEqual(result.images);
+        });
+
+        it('should push the git tag and the registry tags together', async () => {
+            const result = await publish(buildOptions({
+                ref: 'refs/tags/v1.2.3',
+                registryTags: ['latest'],
+                platforms,
+            }), context);
+
+            expect(result.images).toEqual([
+                'ghcr.io/tada5hi/some-repo:1.2.3',
+                'ghcr.io/tada5hi/some-repo:latest',
+            ]);
+            expect(docker.multiPlatformBuilds[0]?.images).toEqual(result.images);
+        });
+
+        it('should forward labels and build args', async () => {
+            await publish(buildOptions({
+                runId: '42',
+                runNumber: '7',
+                buildArgs: ['FOO=bar'],
+                platforms,
+            }), context);
+
+            expect(docker.multiPlatformBuilds[0]?.labels).toEqual({ runId: '42', runNumber: '7' });
+            expect(docker.multiPlatformBuilds[0]?.buildArgs).toEqual(['FOO=bar']);
+        });
+
+        it('should build even when a local image for the ref exists', async () => {
+            const options = buildOptions({ platforms });
+            const first = await publish(buildOptions(), { ...context, docker: new MemoryDockerClient() });
+
+            const existing = new MemoryDockerClient([first.imageId]);
+            const result = await publish(options, { ...context, docker: existing });
+
+            expect(result.built).toBe(true);
+            expect(existing.multiPlatformBuilds).toHaveLength(1);
+        });
+
+        it('should skip the build when no tag is derived', async () => {
+            const result = await publish(buildOptions({
+                ref: 'refs/tags/other-package@1.2.3',
+                gitTagPrefix: 'some-package',
+                registryTags: [],
+                platforms,
+            }), context);
+
+            expect(result.built).toBe(false);
+            expect(result.images).toEqual([]);
+            expect(docker.multiPlatformBuilds).toHaveLength(0);
+            expect(docker.createdBuilders).toHaveLength(0);
+        });
+
+        it('should remove the builder it created when cleanup is enabled', async () => {
+            await publish(buildOptions({ cleanup: true, platforms }), context);
+
+            expect(docker.createdBuilders).toEqual(['craneship']);
+            expect(docker.removedBuilders).toEqual(['craneship']);
+            // there is no local image to remove
+            expect(docker.removed).toEqual([]);
+        });
+
+        it('should keep the builder it created when cleanup is disabled', async () => {
+            await publish(buildOptions({ cleanup: false, platforms }), context);
+
+            expect(docker.createdBuilders).toEqual(['craneship']);
+            expect(docker.removedBuilders).toEqual([]);
+            expect(docker.builders.has('craneship')).toBe(true);
+        });
+
+        it('should never remove a builder it did not create', async () => {
+            const existing = new MemoryDockerClient([], ['craneship']);
+
+            await publish(buildOptions({ cleanup: true, platforms }), { ...context, docker: existing });
+
+            expect(existing.createdBuilders).toEqual([]);
+            expect(existing.removedBuilders).toEqual([]);
+            expect(existing.multiPlatformBuilds[0]?.builder).toBe('craneship');
+        });
+
+        it('should remove the created builder and log out when the build fails', async () => {
+            docker.buildAndPushImage = async () => {
+                throw new Error('denied');
+            };
+
+            await expect(publish(buildOptions({ cleanup: true, platforms }), context))
+                .rejects.toThrow('denied');
+
+            expect(docker.removedBuilders).toEqual(['craneship']);
+            expect(docker.logouts).toEqual(['ghcr.io']);
+        });
+
+        it('should log in before building', async () => {
+            await publish(buildOptions({ platforms }), context);
+
+            expect(docker.logins).toHaveLength(1);
+            expect(docker.logouts).toEqual(['ghcr.io']);
+        });
+    });
 });

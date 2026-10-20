@@ -154,6 +154,7 @@ Releases are never cut by hand.
 `action.yml` is a **composite** action, not a Docker action. It sets up Node, installs and builds inside `${{ github.action_path }}`, then runs `dist/cli.mjs`.
 
 - Adding an input means touching three places: `action.yml` inputs, the `env:` block of the `Publish` step, and the `args` array in its script, plus `src/cli/args.ts` and `src/cli/options.ts`.
+- The `Set up QEMU` step (`docker/setup-qemu-action@v4`) runs only when `platforms` is set, before `Publish`. It is a marketplace step like `actions/setup-node`, rather than a `docker run --privileged tonistiigi/binfmt` script, because it is Docker's maintained wrapper of that same image, caches it, and takes the platform list as is.
 - Boolean inputs map to citty's negation flags (`--no-cleanup`, `--no-gitTag`) rather than `--cleanup false`.
 - The `token` input is deprecated and unused. It stays declared so existing workflows do not emit an unexpected-input warning.
 

@@ -24,8 +24,9 @@ craneship/
 │   │   │   ├── memory.ts            #   MemoryCommandRunner (records calls, scripts responses)
 │   │   │   ├── error.ts             #   CommandError with the captured result
 │   │   │   └── index.ts
-│   │   ├── docker/                  # IDockerClient: login/logout/exists/build/tag/push/remove
+│   │   ├── docker/                  # IDockerClient: login/logout/exists/build/tag/push/remove, buildx builder + multi-platform build
 │   │   │   ├── types.ts
+│   │   │   ├── constants.ts         #   DOCKER_BUILDER_NAME (the buildx builder craneship creates)
 │   │   │   ├── cli.ts               #   DockerCLIClient, shells out via ICommandRunner
 │   │   │   ├── memory.ts            #   MemoryDockerClient, tracks an in-memory image set
 │   │   │   ├── url.ts               #   buildDockerImageURL (pure)
@@ -75,9 +76,9 @@ craneship/
 
 | Module                   | Purpose                                                                                                  |
 |--------------------------|----------------------------------------------------------------------------------------------------------|
-| `src/module.ts`          | The whole publish flow. Pure orchestration; it never spawns a process itself, only calls its ports.       |
+| `src/module.ts`          | The whole publish flow (single-platform and buildx multi-platform). Pure orchestration; it never spawns a process itself, only calls its ports. |
 | `src/cli/module.ts`      | Composition root: constructs `NodeCommandRunner`, `DockerCLIClient`, `GitCLIClient`, `ConsolaLogger`.      |
-| `src/cli/options.ts`     | Translates citty args into `Options`. Where defaults and multi-value splitting live.                       |
+| `src/cli/options.ts`     | Translates citty args into `Options`. Where defaults and multi-value splitting live (`toLines`, `toList`). |
 | `src/core/*/types.ts`    | The `I`-prefixed interface for that port. Everything else in the directory implements it.                  |
 | `src/utils/`             | Pure functions with no imports from `core/`. Safe to call from anywhere.                                   |
 

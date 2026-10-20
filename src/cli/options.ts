@@ -44,6 +44,17 @@ export function toLines(input: unknown) : string[] {
         .filter((line) => line.length > 0);
 }
 
+/**
+ * Split a comma or newline separated multi value input, as used by the
+ * platforms action input.
+ */
+export function toList(input: unknown) : string[] {
+    return toStringValue(input)
+        .split(/[\r\n,]+/)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+}
+
 export function buildOptionsFromArgs(args: PublishCommandArgs) : Options {
     const registryTags = toLines(args.registryTag);
     if (registryTags.length === 0) {
@@ -59,6 +70,7 @@ export function buildOptionsFromArgs(args: PublishCommandArgs) : Options {
         buildArgs: toLines(args.buildArgs),
         cleanup: toBooleanValue(args.cleanup, true),
         clone: toBooleanValue(args.clone, false),
+        platforms: toList(args.platforms),
 
         gitTag: toBooleanValue(args.gitTag, true),
         gitTagPrefix: toStringValue(args.gitTagPrefix),
