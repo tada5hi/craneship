@@ -238,17 +238,21 @@ With `gitTag: 'false'` a tag ref no longer contributes an image tag, so only `re
   tag. A multi-platform image cannot be loaded into the local daemon, so there is no separate tag and
   push step and no local image is left behind.
 - If the current buildx builder uses the `docker` driver, which cannot hold a multi-platform image, a
-  `docker-container` builder named `craneship` is created (or reused, when an earlier step left one
-  behind) and passed with `--builder`. It is never made the current builder, so later steps are not
-  affected. Any other current builder (e.g. one from `docker/setup-buildx-action`) is used as is.
+  `docker-container` builder is created and passed with `--builder`. It is never made the current
+  builder, so later steps are not affected. Any other current builder (e.g. one from
+  `docker/setup-buildx-action`) is used as is.
+- With `cleanup` enabled (the default) that builder is private to the run: it gets a unique name
+  (`craneship-<random>`) and is removed again afterwards, with its build cache. Jobs sharing one docker
+  daemon (e.g. on a self-hosted runner) therefore never remove a builder from under each other.
+- With `cleanup: 'false'` the builder is shared instead: it is named `craneship`, reused when an earlier
+  run left it behind, and kept, so its cache makes a later build fast.
 - A `docker-container` builder runs its own BuildKit and pulls every `FROM` image from a registry.
   An image which exists only in the runner's local daemon (e.g. built by an earlier step) is not
   visible to it, so push such a base image first.
 - Every run builds and pushes again, even for a ref built earlier in the same job: there is no local
-  image to find. With `cleanup: 'false'` the builder's cache makes such a repeat fast.
-- `cleanup` removes the `craneship` builder again, with its build cache, but only when this run
-  created it. Set `cleanup: 'false'` to keep it, and its cache, for a later build in the same job.
-- A ref which derives no tag (e.g. a git tag not matching `gitTagPrefix`) skips the build entirely.
+  image to find. With `cleanup: 'false'` the shared builder's cache makes such a repeat fast.
+- A ref which derives no tag (e.g. a git tag not matching `gitTagPrefix`) skips the build entirely,
+  with a warning.
 
 Without `platforms` nothing changes: the image is built with a plain `docker build`, then tagged and
 pushed. Outside GitHub Actions the CLI expects `docker buildx` to be available and, for foreign

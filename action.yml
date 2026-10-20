@@ -98,11 +98,22 @@ runs:
         # needs binfmt handlers registered on the runner. Only the requested
         # platforms are installed (setup-qemu-action splits on commas and
         # newlines, binfmt maps linux/arm64 to arm64).
+        -   name: Resolve platforms
+            id: platforms
+            shell: bash
+            env:
+                INPUT_PLATFORMS: ${{ inputs.platforms }}
+            # Split and trimmed like the CLI does, so whitespace alone means no
+            # platforms here too, instead of setup-qemu-action installing all.
+            run: |
+                list=$(printf '%s' "$INPUT_PLATFORMS" | tr ',\r\n' '\n\n\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d' | paste -sd, -)
+                echo "list=$list" >> "$GITHUB_OUTPUT"
+
         -   name: Set up QEMU
-            if: inputs.platforms != ''
+            if: steps.platforms.outputs.list != ''
             uses: docker/setup-qemu-action@v4
             with:
-                platforms: ${{ inputs.platforms }}
+                platforms: ${{ steps.platforms.outputs.list }}
 
         -   name: Publish
             shell: bash

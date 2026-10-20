@@ -149,7 +149,7 @@ async function publishMultiPlatform(
     // buildx refuses to push without a tag, and a build nobody can pull
     // afterwards is wasted work
     if (images.length === 0) {
-        logger.info('No image tag was derived from the ref, skipping the build.');
+        logger.warn('No image tag was derived from the ref, skipping the build.');
 
         return result;
     }
@@ -161,7 +161,9 @@ async function publishMultiPlatform(
     });
 
     try {
-        const builder = await docker.ensureMultiPlatformBuilder();
+        // cleanup removes the builder again, so it is private to this run;
+        // otherwise it is shared, and later runs reuse it with its cache
+        const builder = await docker.ensureMultiPlatformBuilder({ shared: !options.cleanup });
 
         let buildFailed = false;
         let buildError : unknown;

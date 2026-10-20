@@ -54,6 +54,16 @@ export type MultiPlatformBuildOptions = Omit<ImageBuildOptions, 'image'> & {
     builder?: string
 };
 
+export type MultiPlatformBuilderOptions = {
+    /**
+     * Whether a builder created for the build is shared with later runs.
+     * A shared builder has a fixed name, so it is found and reused, build
+     * cache included. A private one gets a unique name, so removing it
+     * again never pulls a builder from under a concurrent run.
+     */
+    shared: boolean
+};
+
 export type MultiPlatformBuilder = {
     /**
      * Name of the builder, when it is known.
@@ -86,7 +96,7 @@ export interface IDockerClient {
      * Find a builder which can build and push an image for several
      * platforms at once, creating one when none is available.
      */
-    ensureMultiPlatformBuilder() : Promise<MultiPlatformBuilder>;
+    ensureMultiPlatformBuilder(options: MultiPlatformBuilderOptions) : Promise<MultiPlatformBuilder>;
 
     removeBuilder(name: string) : Promise<void>;
 

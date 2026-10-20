@@ -260,7 +260,7 @@ describe('src/module.ts', () => {
             expect(docker.multiPlatformBuilds[0]).toMatchObject({
                 images: result.images,
                 platforms,
-                builder: 'craneship',
+                builder: 'craneship-1',
                 fileName: 'Dockerfile',
                 cwd: '/workspace/images/sandbox-node',
             });
@@ -304,30 +304,42 @@ describe('src/module.ts', () => {
             expect(existing.multiPlatformBuilds).toHaveLength(1);
         });
 
-        it('should skip the build when no tag is derived', async () => {
+        it('should skip the build with a warning when no tag is derived', async () => {
+            const warnings : string[] = [];
+            const logger : ILogger = {
+                debug: () => {},
+                info: () => {},
+                error: () => {},
+                warn: (message) => {
+                    warnings.push(message);
+                },
+            };
+
             const result = await publish(buildOptions({
                 ref: 'refs/tags/other-package@1.2.3',
                 gitTagPrefix: 'some-package',
                 registryTags: [],
                 platforms,
-            }), context);
+            }), { ...context, logger });
 
+            expect(warnings).toEqual(['No image tag was derived from the ref, skipping the build.']);
             expect(result.built).toBe(false);
             expect(result.images).toEqual([]);
             expect(docker.multiPlatformBuilds).toHaveLength(0);
             expect(docker.createdBuilders).toHaveLength(0);
         });
 
-        it('should remove the builder it created when cleanup is enabled', async () => {
+        it('should remove the private builder it created when cleanup is enabled', async () => {
             await publish(buildOptions({ cleanup: true, platforms }), context);
 
-            expect(docker.createdBuilders).toEqual(['craneship']);
-            expect(docker.removedBuilders).toEqual(['craneship']);
+            // private to this run, so removing it never hits a concurrent build
+            expect(docker.createdBuilders).toEqual(['craneship-1']);
+            expect(docker.removedBuilders).toEqual(['craneship-1']);
             // there is no local image to remove
             expect(docker.removed).toEqual([]);
         });
 
-        it('should keep the builder it created when cleanup is disabled', async () => {
+        it('should keep the shared builder it created when cleanup is disabled', async () => {
             await publish(buildOptions({ cleanup: false, platforms }), context);
 
             expect(docker.createdBuilders).toEqual(['craneship']);
@@ -335,14 +347,24 @@ describe('src/module.ts', () => {
             expect(docker.builders.has('craneship')).toBe(true);
         });
 
-        it('should never remove a builder it did not create', async () => {
+        it('should reuse the shared builder when cleanup is disabled', async () => {
             const existing = new MemoryDockerClient([], ['craneship']);
 
-            await publish(buildOptions({ cleanup: true, platforms }), { ...context, docker: existing });
+            await publish(buildOptions({ cleanup: false, platforms }), { ...context, docker: existing });
 
             expect(existing.createdBuilders).toEqual([]);
             expect(existing.removedBuilders).toEqual([]);
             expect(existing.multiPlatformBuilds[0]?.builder).toBe('craneship');
+        });
+
+        it('should never take over or remove the shared builder when cleanup is enabled', async () => {
+            const existing = new MemoryDockerClient([], ['craneship']);
+
+            await publish(buildOptions({ cleanup: true, platforms }), { ...context, docker: existing });
+
+            expect(existing.builders.has('craneship')).toBe(true);
+            expect(existing.removedBuilders).toEqual(['craneship-1']);
+            expect(existing.multiPlatformBuilds[0]?.builder).toBe('craneship-1');
         });
 
         it('should remove the created builder and log out when the build fails', async () => {
@@ -353,7 +375,7 @@ describe('src/module.ts', () => {
             await expect(publish(buildOptions({ cleanup: true, platforms }), context))
                 .rejects.toThrow('denied');
 
-            expect(docker.removedBuilders).toEqual(['craneship']);
+            expect(docker.removedBuilders).toEqual(['craneship-1']);
             expect(docker.logouts).toEqual(['ghcr.io']);
         });
 

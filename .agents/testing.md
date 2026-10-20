@@ -51,7 +51,7 @@ expect(docker.pushed).toEqual(['ghcr.io/tada5hi/some-repo:latest']);
 | `MemoryDockerClient`  | `images`, `builds`, `pushed`, `removed`, `logins`, `logouts`, `builders`, `createdBuilders`, `removedBuilders`, `multiPlatformBuilds` |
 | `MemoryGitClient`     | `clones`                                                         |
 
-`MemoryDockerClient` also *enforces* invariants. Tagging or pushing an image it does not hold throws, so a test that gets the order wrong fails rather than silently passing. The same goes for building with, or removing, a builder it does not hold, and a multi-platform build never adds to `images` (it is pushed straight from the build, as with buildx). Pre-existing builders are its second constructor argument: `new MemoryDockerClient([], ['craneship'])`.
+`MemoryDockerClient` also *enforces* invariants. Tagging or pushing an image it does not hold throws, so a test that gets the order wrong fails rather than silently passing. The same goes for building with, or removing, a builder it does not hold, and a multi-platform build never adds to `images` (it is pushed straight from the build, as with buildx). Pre-existing builders are its second constructor argument: `new MemoryDockerClient([], ['craneship'])`. A private builder (`shared: false`) is named `craneship-1`, `craneship-2`, … so assertions stay deterministic.
 
 ## Test Layers
 

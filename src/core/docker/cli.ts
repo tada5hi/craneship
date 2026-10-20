@@ -5,6 +5,7 @@
  * view the LICENSE file that was distributed with this source code.
  */
 
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { CommandError } from '../command/index.ts';
@@ -15,6 +16,7 @@ import type {
     ImageBuildOptions,
     MultiPlatformBuildOptions,
     MultiPlatformBuilder,
+    MultiPlatformBuilderOptions,
     RegistryCredentials,
 } from './types.ts';
 
@@ -81,7 +83,7 @@ export class DockerCLIClient implements IDockerClient {
         await this.runner.run(this.binary, args, { cwd: this.resolveContext(options.cwd) });
     }
 
-    async ensureMultiPlatformBuilder() : Promise<MultiPlatformBuilder> {
+    async ensureMultiPlatformBuilder(options: MultiPlatformBuilderOptions) : Promise<MultiPlatformBuilder> {
         const current = await this.runner.run(this.binary, ['buildx', 'inspect']);
 
         // The docker driver builds into the local image store, which cannot
@@ -93,27 +95,31 @@ export class DockerCLIClient implements IDockerClient {
             return name ? { name, created: false } : { created: false };
         }
 
-        try {
-            await this.runner.run(this.binary, ['buildx', 'inspect', DOCKER_BUILDER_NAME]);
+        if (!options.shared) {
+            const name = `${DOCKER_BUILDER_NAME}-${randomBytes(4).toString('hex')}`;
+            await this.createBuilder(name);
 
-            return { name: DOCKER_BUILDER_NAME, created: false };
-        } catch (error) {
-            if (!(error instanceof CommandError) || !error.result) {
-                throw error;
-            }
+            return { name, created: true };
         }
 
-        // The builder is not made the current one (buildx use), so later
-        // steps of the job keep building with whatever they used before.
-        await this.runner.run(this.binary, [
-            'buildx',
-            'create',
-            '--name',
-            DOCKER_BUILDER_NAME,
-            '--driver',
-            'docker-container',
-            '--bootstrap',
-        ]);
+        if (await this.builderExists(DOCKER_BUILDER_NAME)) {
+            return { name: DOCKER_BUILDER_NAME, created: false };
+        }
+
+        try {
+            await this.createBuilder(DOCKER_BUILDER_NAME);
+        } catch (error) {
+            // a concurrent run may have created it in the meantime
+            if (
+                !(error instanceof CommandError) ||
+                !error.result ||
+                !await this.builderExists(DOCKER_BUILDER_NAME)
+            ) {
+                throw error;
+            }
+
+            return { name: DOCKER_BUILDER_NAME, created: false };
+        }
 
         return { name: DOCKER_BUILDER_NAME, created: true };
     }
@@ -155,6 +161,35 @@ export class DockerCLIClient implements IDockerClient {
 
     async removeImage(image: string) : Promise<void> {
         await this.runner.run(this.binary, ['image', 'rm', '--force', image]);
+    }
+
+    protected async builderExists(name: string) : Promise<boolean> {
+        try {
+            await this.runner.run(this.binary, ['buildx', 'inspect', name]);
+
+            return true;
+        } catch (error) {
+            // only a non-zero exit means missing, a failed spawn is rethrown
+            if (error instanceof CommandError && error.result) {
+                return false;
+            }
+
+            throw error;
+        }
+    }
+
+    protected async createBuilder(name: string) : Promise<void> {
+        // The builder is not made the current one (buildx use), so later
+        // steps of the job keep building with whatever they used before.
+        await this.runner.run(this.binary, [
+            'buildx',
+            'create',
+            '--name',
+            name,
+            '--driver',
+            'docker-container',
+            '--bootstrap',
+        ]);
     }
 
     protected buildMetadataArgs(options: Pick<ImageBuildOptions, 'labels' | 'buildArgs'>) : string[] {

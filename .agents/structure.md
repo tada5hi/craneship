@@ -26,7 +26,7 @@ craneship/
 │   │   │   └── index.ts
 │   │   ├── docker/                  # IDockerClient: login/logout/exists/build/tag/push/remove, buildx builder + multi-platform build
 │   │   │   ├── types.ts
-│   │   │   ├── constants.ts         #   DOCKER_BUILDER_NAME (the buildx builder craneship creates)
+│   │   │   ├── constants.ts         #   DOCKER_BUILDER_NAME (the shared buildx builder; private ones get a suffix)
 │   │   │   ├── cli.ts               #   DockerCLIClient, shells out via ICommandRunner
 │   │   │   ├── memory.ts            #   MemoryDockerClient, tracks an in-memory image set
 │   │   │   ├── url.ts               #   buildDockerImageURL (pure)

@@ -6,6 +6,36 @@ import {
 } from '../../../../src/core/index.ts';
 import type { CommandOptions, CommandResult } from '../../../../src/core/index.ts';
 
+/**
+ * Throws the error the intercept returns for an invocation, before any
+ * scripted response is consulted. Lets a test fail one call of a command
+ * which succeeds otherwise, or fail it with a spawn error.
+ */
+class InterceptingRunner extends MemoryCommandRunner {
+    protected intercept : (line: string) => Error | undefined;
+
+    constructor(intercept: (line: string) => Error | undefined) {
+        super();
+
+        this.intercept = intercept;
+    }
+
+    override async run(command: string, args: string[], options?: CommandOptions) : Promise<CommandResult> {
+        const error = this.intercept(args.join(' '));
+        if (error) {
+            this.calls.push({
+                command,
+                args,
+                options: options ?? {},
+            });
+
+            throw error;
+        }
+
+        return super.run(command, args, options);
+    }
+}
+
 describe('src/core/docker/cli.ts', () => {
     it('should pass the registry password through stdin', async () => {
         const runner = new MemoryCommandRunner();
@@ -107,7 +137,7 @@ describe('src/core/docker/cli.ts', () => {
         const runner = new MemoryCommandRunner()
             .respondTo('docker buildx inspect', { stdout: 'Name:          ci\nDriver:        docker-container\n\nNodes:\nName:          ci0\n' });
 
-        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder();
+        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true });
 
         expect(builder).toEqual({ name: 'ci', created: false });
         expect(runner.commandLines).toEqual(['docker buildx inspect']);
@@ -118,7 +148,7 @@ describe('src/core/docker/cli.ts', () => {
             .respondTo('docker buildx inspect craneship', { stdout: 'Name:          craneship\nDriver:        docker-container\n' })
             .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
 
-        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder();
+        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true });
 
         expect(builder).toEqual({ name: 'craneship', created: false });
         expect(runner.commandLines).toEqual([
@@ -127,12 +157,79 @@ describe('src/core/docker/cli.ts', () => {
         ]);
     });
 
+    it('should reuse the current builder for a private build when it is not the docker driver', async () => {
+        const runner = new MemoryCommandRunner()
+            .respondTo('docker buildx inspect', { stdout: 'Name:          ci\nDriver:        docker-container\n' });
+
+        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: false });
+
+        expect(builder).toEqual({ name: 'ci', created: false });
+        expect(runner.commandLines).toEqual(['docker buildx inspect']);
+    });
+
+    it('should create a uniquely named builder for a private build', async () => {
+        const runner = new MemoryCommandRunner()
+            .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
+
+        const client = new DockerCLIClient(runner);
+        const first = await client.ensureMultiPlatformBuilder({ shared: false });
+        const second = await client.ensureMultiPlatformBuilder({ shared: false });
+
+        expect(first.created).toBe(true);
+        expect(first.name).toMatch(/^craneship-[0-9a-f]{8}$/);
+        expect(second.name).not.toBe(first.name);
+        // never looked up, so a builder of a concurrent run is never taken over
+        expect(runner.commandLines).not.toContain('docker buildx inspect craneship');
+        expect(runner.commandLines[1]).toBe(
+            `docker buildx create --name ${first.name} --driver docker-container --bootstrap`,
+        );
+    });
+
+    it('should reuse the shared builder when a concurrent run created it first', async () => {
+        let lookups = 0;
+
+        // missing on the first lookup, there after the failed create
+        const runner = new InterceptingRunner((line) => {
+            if (line !== 'buildx inspect craneship' || lookups++ > 0) {
+                return undefined;
+            }
+
+            return CommandError.exitedNonZero('docker', line.split(' '), {
+                stdout: '',
+                stderr: 'no builder "craneship" found',
+                code: 1,
+            });
+        })
+            .respondTo('docker buildx create', { code: 1, stderr: 'existing instance for "craneship"' })
+            .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
+
+        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true });
+
+        expect(builder).toEqual({ name: 'craneship', created: false });
+        expect(runner.commandLines).toEqual([
+            'docker buildx inspect',
+            'docker buildx inspect craneship',
+            'docker buildx create --name craneship --driver docker-container --bootstrap',
+            'docker buildx inspect craneship',
+        ]);
+    });
+
+    it('should reject when the shared builder can neither be created nor found', async () => {
+        const runner = new MemoryCommandRunner()
+            .respondTo('docker buildx inspect craneship', { code: 1, stderr: 'no builder "craneship" found' })
+            .respondTo('docker buildx create', { code: 1, stderr: 'permission denied' })
+            .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
+
+        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true }))
+            .rejects.toThrow(/exit code 1/);
+    });
+
     it('should create a docker-container builder when the docker driver is current', async () => {
         const runner = new MemoryCommandRunner()
             .respondTo('docker buildx inspect craneship', { code: 1, stderr: 'no builder "craneship" found' })
             .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
 
-        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder();
+        const builder = await new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true });
 
         expect(builder).toEqual({ name: 'craneship', created: true });
         // the builder is selected per build with --builder, never made
@@ -145,20 +242,12 @@ describe('src/core/docker/cli.ts', () => {
     });
 
     it('should not mistake a failed spawn for a missing builder', async () => {
-        class SpawnFailingRunner extends MemoryCommandRunner {
-            override async run(command: string, args: string[], options?: CommandOptions) : Promise<CommandResult> {
-                if (args.join(' ') === 'buildx inspect craneship') {
-                    throw CommandError.spawnFailed(command, args, new Error('EAGAIN'));
-                }
-
-                return super.run(command, args, options);
-            }
-        }
-
-        const runner = new SpawnFailingRunner()
+        const runner = new InterceptingRunner((line) => (line === 'buildx inspect craneship' ?
+            CommandError.spawnFailed('docker', line.split(' '), new Error('EAGAIN')) :
+            undefined))
             .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
 
-        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder())
+        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true }))
             .rejects.toThrow(/could not be spawned/);
         expect(runner.commandLines).not.toContain(
             'docker buildx create --name craneship --driver docker-container --bootstrap',
@@ -169,7 +258,7 @@ describe('src/core/docker/cli.ts', () => {
         const runner = new MemoryCommandRunner()
             .respondTo('docker buildx inspect', { code: 1, stderr: 'unknown command: docker buildx' });
 
-        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder())
+        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: false }))
             .rejects.toThrow(/exit code 1/);
     });
 

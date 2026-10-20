@@ -134,11 +134,11 @@ Options ──► parseGitHubRef(options.ref)
 With `options.platforms` non-empty (`platforms` input, `--platforms`, comma or newline separated via `toList`), `publish()` takes a separate branch, `publishMultiPlatform()`:
 
 ```
-images empty ? return (built: false)   buildx refuses --push without a tag
+images empty ? warn, return (built: false)   buildx refuses --push without a tag
     │
 docker.login()
     │
-docker.ensureMultiPlatformBuilder()    { name?, created }
+docker.ensureMultiPlatformBuilder({ shared: !cleanup })    { name?, created }
     │
 docker.buildAndPushImage({ images, platforms, builder, ... })
     │                                  one `docker buildx build --platform a,b --tag x --tag y --push`
@@ -149,10 +149,12 @@ docker.logout()
 ```
 
 - A multi-platform image cannot be loaded into the local daemon, so the build-once-then-tag-and-push flow does not apply: there is no `imageExists` short-cut, no `tagImage`/`pushImage`, and no local image to remove. `result.imageId` is still `md5(ref)`, but nothing is tagged with it.
-- `DockerCLIClient.ensureMultiPlatformBuilder()` reads `docker buildx inspect`. Any driver other than `docker` is reused as is (its `Name`). With the `docker` driver it reuses a builder named `DOCKER_BUILDER_NAME` (`craneship`) or creates one (`buildx create --driver docker-container --bootstrap`). It never runs `buildx use`; the build selects it with `--builder`, so later steps of the job keep their builder. Only a non-zero exit of `buildx inspect craneship` counts as "missing"; a spawn failure rethrows.
-- `cleanup` removes only a builder this run created, so a builder left by an earlier step (`cleanup: false`) or by `docker/setup-buildx-action` survives.
+- `DockerCLIClient.ensureMultiPlatformBuilder()` reads `docker buildx inspect`. Any driver other than `docker` is reused as is (its `Name`). With the `docker` driver it creates a `docker-container` builder (`buildx create --driver docker-container --bootstrap`). It never runs `buildx use`; the build selects it with `--builder`, so later steps of the job keep their builder.
+- The builder name depends on `cleanup`. With cleanup on, the builder is **private**: `craneship-<8 hex>`, never looked up, always created, then removed. With cleanup off it is **shared**: `DOCKER_BUILDER_NAME` (`craneship`) is reused when `buildx inspect craneship` finds it, created otherwise, and kept. A fixed name for a builder that gets removed again would let one job remove the builder a concurrent job on the same daemon is building with, which is why the two cases differ.
+- Only a non-zero exit of `buildx inspect <name>` counts as "missing"; a spawn failure rethrows. A failed `buildx create` of the shared builder is followed by one more lookup, since a concurrent run may have created it in the meantime; only if that lookup also misses is the create error thrown.
+- `cleanup` removes only a builder this run created, so a shared builder left by an earlier run or one from `docker/setup-buildx-action` survives.
 - A failed build is rethrown after the builder removal. If the removal fails too, it is only logged as a warning, so the build error is the one reported; after a successful build a failed removal throws.
-- QEMU is not the CLI's job: `action.yml` runs `docker/setup-qemu-action@v4` with the requested platforms before the Publish step, only when `platforms` is set. Outside Actions the user registers binfmt handlers.
+- QEMU is not the CLI's job: `action.yml` runs `docker/setup-qemu-action@v4` with the requested platforms before the Publish step, only when `platforms` holds a non-blank entry (a `Resolve platforms` step splits and trims the input the way the CLI does, so a whitespace-only input does not make setup-qemu-action install every emulator). Outside Actions the user registers binfmt handlers.
 
 ## Tag derivation
 

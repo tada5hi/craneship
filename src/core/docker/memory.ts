@@ -11,6 +11,7 @@ import type {
     ImageBuildOptions,
     MultiPlatformBuildOptions,
     MultiPlatformBuilder,
+    MultiPlatformBuilderOptions,
     RegistryCredentials,
 } from './types.ts';
 
@@ -91,15 +92,20 @@ export class MemoryDockerClient implements IDockerClient {
         this.removed.push(image);
     }
 
-    async ensureMultiPlatformBuilder() : Promise<MultiPlatformBuilder> {
-        if (this.builders.has(DOCKER_BUILDER_NAME)) {
+    async ensureMultiPlatformBuilder(options: MultiPlatformBuilderOptions) : Promise<MultiPlatformBuilder> {
+        if (options.shared && this.builders.has(DOCKER_BUILDER_NAME)) {
             return { name: DOCKER_BUILDER_NAME, created: false };
         }
 
-        this.builders.add(DOCKER_BUILDER_NAME);
-        this.createdBuilders.push(DOCKER_BUILDER_NAME);
+        // a private builder is named per run, numbered here to stay predictable
+        const name = options.shared ?
+            DOCKER_BUILDER_NAME :
+            `${DOCKER_BUILDER_NAME}-${this.createdBuilders.length + 1}`;
 
-        return { name: DOCKER_BUILDER_NAME, created: true };
+        this.builders.add(name);
+        this.createdBuilders.push(name);
+
+        return { name, created: true };
     }
 
     async removeBuilder(name: string) : Promise<void> {
