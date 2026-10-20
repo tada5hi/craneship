@@ -1,6 +1,6 @@
 {
     "name": "craneship",
-    "version": "4.0.0",
+    "version": "4.1.0",
     "type": "module",
     "description": "Build, tag and push docker images, with the tags derived from the git ref.",
     "main": "dist/index.mjs",
