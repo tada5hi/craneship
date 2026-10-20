@@ -94,10 +94,6 @@ runs:
             run: npm run build
             working-directory: ${{ github.action_path }}
 
-        # A foreign platform's RUN steps execute under QEMU emulation, which
-        # needs binfmt handlers registered on the runner. Only the requested
-        # platforms are installed (setup-qemu-action splits on commas and
-        # newlines, binfmt maps linux/arm64 to arm64).
         -   name: Resolve platforms
             id: platforms
             shell: bash
@@ -109,6 +105,9 @@ runs:
                 list=$(printf '%s' "$INPUT_PLATFORMS" | tr ',\r\n' '\n\n\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sed '/^$/d' | paste -sd, -)
                 echo "list=$list" >> "$GITHUB_OUTPUT"
 
+        # A foreign platform's RUN steps execute under QEMU emulation, which
+        # needs binfmt handlers registered on the runner. Only the requested
+        # platforms are installed (binfmt maps linux/arm64 to arm64).
         -   name: Set up QEMU
             if: steps.platforms.outputs.list != ''
             uses: docker/setup-qemu-action@v4

@@ -214,6 +214,45 @@ describe('src/core/docker/cli.ts', () => {
         ]);
     });
 
+    it('should remove a private builder whose creation failed', async () => {
+        const runner = new MemoryCommandRunner()
+            .respondTo('docker buildx create', { code: 1, stderr: 'failed to bootstrap' })
+            .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
+
+        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: false }))
+            .rejects.toThrow(/exit code 1/);
+
+        const name = runner.calls[1]?.args[3];
+        expect(name).toMatch(/^craneship-[0-9a-f]{8}$/);
+        expect(runner.commandLines[2]).toBe(`docker buildx rm ${name}`);
+    });
+
+    it('should report the create error when the follow-up lookup cannot be spawned', async () => {
+        let lookups = 0;
+
+        // missing on the first lookup, unspawnable on the second
+        const runner = new InterceptingRunner((line) => {
+            if (line !== 'buildx inspect craneship') {
+                return undefined;
+            }
+
+            if (lookups++ === 0) {
+                return CommandError.exitedNonZero('docker', line.split(' '), {
+                    stdout: '',
+                    stderr: 'no builder "craneship" found',
+                    code: 1,
+                });
+            }
+
+            return CommandError.spawnFailed('docker', line.split(' '), new Error('EAGAIN'));
+        })
+            .respondTo('docker buildx create', { code: 1, stderr: 'permission denied' })
+            .respondTo('docker buildx inspect', { stdout: 'Name:          default\nDriver:        docker\n' });
+
+        await expect(new DockerCLIClient(runner).ensureMultiPlatformBuilder({ shared: true }))
+            .rejects.toThrow(/exit code 1/);
+    });
+
     it('should reject when the shared builder can neither be created nor found', async () => {
         const runner = new MemoryCommandRunner()
             .respondTo('docker buildx inspect craneship', { code: 1, stderr: 'no builder "craneship" found' })

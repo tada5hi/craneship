@@ -97,7 +97,16 @@ export class DockerCLIClient implements IDockerClient {
 
         if (!options.shared) {
             const name = `${DOCKER_BUILDER_NAME}-${randomBytes(4).toString('hex')}`;
-            await this.createBuilder(name);
+
+            try {
+                await this.createBuilder(name);
+            } catch (error) {
+                // --bootstrap can fail after the builder was registered. Its
+                // name is known to no one else, so it would never be removed.
+                await this.removeBuilder(name).catch(() => undefined);
+
+                throw error;
+            }
 
             return { name, created: true };
         }
@@ -109,12 +118,14 @@ export class DockerCLIClient implements IDockerClient {
         try {
             await this.createBuilder(DOCKER_BUILDER_NAME);
         } catch (error) {
-            // a concurrent run may have created it in the meantime
-            if (
-                !(error instanceof CommandError) ||
-                !error.result ||
-                !await this.builderExists(DOCKER_BUILDER_NAME)
-            ) {
+            if (!(error instanceof CommandError) || !error.result) {
+                throw error;
+            }
+
+            // a concurrent run may have created it in the meantime; when
+            // that cannot be told either, the create error is the one to report
+            const exists = await this.builderExists(DOCKER_BUILDER_NAME).catch(() => false);
+            if (!exists) {
                 throw error;
             }
 
