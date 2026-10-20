@@ -49,7 +49,9 @@ The image is built **once** under a local id derived from the ref, then tagged a
 resulting reference. A ref which has already been built during the same job is not rebuilt.
 
 With [`platforms`](#multi-platform-images) set, the image is instead built once with `docker buildx`
-for every platform and pushed under every reference straight from that build.
+for every platform and pushed under every reference straight from that build. A multi-platform image
+is never kept locally, so there is no "already built" short-cut: every run builds and pushes again.
+The builder's cache speeds up a repeated build when `cleanup` is `'false'`.
 
 ## Usage
 
@@ -239,6 +241,11 @@ With `gitTag: 'false'` a tag ref no longer contributes an image tag, so only `re
   `docker-container` builder named `craneship` is created (or reused, when an earlier step left one
   behind) and passed with `--builder`. It is never made the current builder, so later steps are not
   affected. Any other current builder (e.g. one from `docker/setup-buildx-action`) is used as is.
+- A `docker-container` builder runs its own BuildKit and pulls every `FROM` image from a registry.
+  An image which exists only in the runner's local daemon (e.g. built by an earlier step) is not
+  visible to it, so push such a base image first.
+- Every run builds and pushes again, even for a ref built earlier in the same job: there is no local
+  image to find. With `cleanup: 'false'` the builder's cache makes such a repeat fast.
 - `cleanup` removes the `craneship` builder again, with its build cache, but only when this run
   created it. Set `cleanup: 'false'` to keep it, and its cache, for a later build in the same job.
 - A ref which derives no tag (e.g. a git tag not matching `gitTagPrefix`) skips the build entirely.
@@ -387,6 +394,8 @@ Swap in `MemoryDockerClient` / `MemoryGitClient` / `NoopLogger` to exercise it i
 
 - **Node.js** >= 22.0.0
 - The `docker` and `git` CLIs on `PATH` (both are preinstalled on GitHub runners)
+- With `platforms` set: `docker buildx` (preinstalled on GitHub runners) and, for foreign platforms
+  outside GitHub Actions, QEMU registered via binfmt (`docker run --privileged --rm tonistiigi/binfmt --install all`)
 
 ## License
 
