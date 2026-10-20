@@ -2,7 +2,7 @@
 
 # craneship: Agent Guide
 
-A GitHub Action **and** CLI which builds a docker image from a repository at a given git ref, then tags and pushes it under every tag that ref implies (`refs/tags/v1.2.3` → `1.2.3`, monorepo tags like `some-package@v1.2.3` → `1.2.3`, plus any explicit `registryTag`).
+A GitHub Action **and** CLI which builds a docker image from a repository at a given git ref, then tags and pushes it under every tag that ref implies (`refs/tags/v1.2.3` → `1.2.3`, monorepo tags like `some-package@v1.2.3` → `1.2.3`, plus any explicit `registryTag`). With `platforms` set it builds for every platform with `docker buildx` and pushes every tag straight from that build.
 
 The repository ships three artifacts from one source tree: a **library** (`src/index.ts`), a **citty CLI** (`src/cli.ts`), and a **composite** GitHub Action (`action.yml`) which runs that CLI. This mirrors [tada5hi/monoship](https://github.com/tada5hi/monoship). When in doubt about layout or naming, look there first.
 

@@ -5,9 +5,13 @@
  * view the LICENSE file that was distributed with this source code.
  */
 
+import { DOCKER_BUILDER_NAME } from './constants.ts';
 import type {
     IDockerClient,
     ImageBuildOptions,
+    MultiPlatformBuildOptions,
+    MultiPlatformBuilder,
+    MultiPlatformBuilderOptions,
     RegistryCredentials,
 } from './types.ts';
 
@@ -28,9 +32,25 @@ export class MemoryDockerClient implements IDockerClient {
 
     readonly logouts : string[] = [];
 
-    constructor(images: string[] = []) {
+    readonly builders : Set<string> = new Set();
+
+    readonly createdBuilders : string[] = [];
+
+    readonly removedBuilders : string[] = [];
+
+    readonly multiPlatformBuilds : MultiPlatformBuildOptions[] = [];
+
+    /**
+     * @param images images the daemon already holds
+     * @param builders multi-platform builders which already exist
+     */
+    constructor(images: string[] = [], builders: string[] = []) {
         for (const image of images) {
             this.images.add(image);
+        }
+
+        for (const builder of builders) {
+            this.builders.add(builder);
         }
     }
 
@@ -70,5 +90,41 @@ export class MemoryDockerClient implements IDockerClient {
     async removeImage(image: string) : Promise<void> {
         this.images.delete(image);
         this.removed.push(image);
+    }
+
+    async ensureMultiPlatformBuilder(options: MultiPlatformBuilderOptions) : Promise<MultiPlatformBuilder> {
+        if (options.shared && this.builders.has(DOCKER_BUILDER_NAME)) {
+            return { name: DOCKER_BUILDER_NAME, created: false };
+        }
+
+        // a private builder is named per run, numbered here to stay predictable
+        const name = options.shared ?
+            DOCKER_BUILDER_NAME :
+            `${DOCKER_BUILDER_NAME}-${this.createdBuilders.length + 1}`;
+
+        this.builders.add(name);
+        this.createdBuilders.push(name);
+
+        return { name, created: true };
+    }
+
+    async removeBuilder(name: string) : Promise<void> {
+        if (!this.builders.has(name)) {
+            throw new Error(`The builder ${name} does not exist.`);
+        }
+
+        this.builders.delete(name);
+        this.removedBuilders.push(name);
+    }
+
+    async buildAndPushImage(options: MultiPlatformBuildOptions) : Promise<void> {
+        if (options.builder && !this.builders.has(options.builder)) {
+            throw new Error(`The builder ${options.builder} does not exist.`);
+        }
+
+        // pushed straight from the build: a multi-platform image never
+        // reaches the local image set, so it cannot be tagged or pushed later
+        this.multiPlatformBuilds.push(options);
+        this.pushed.push(...options.images);
     }
 }

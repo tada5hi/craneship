@@ -48,6 +48,11 @@ compute them:
 The image is built **once** under a local id derived from the ref, then tagged and pushed for each
 resulting reference. A ref which has already been built during the same job is not rebuilt.
 
+With [`platforms`](#multi-platform-images) set, the image is instead built once with `docker buildx`
+for every platform and pushed under every reference straight from that build. A multi-platform image
+is never kept locally, so there is no "already built" short-cut: every run builds and pushes again.
+The builder's cache speeds up a repeated build when `cleanup` is `'false'`.
+
 ## Usage
 
 ```yaml
@@ -209,6 +214,50 @@ A `registryTag` starting with `sha` is attached as a digest rather than a tag:
 
 With `gitTag: 'false'` a tag ref no longer contributes an image tag, so only `registryTag` is used.
 
+### Multi-platform images
+
+```yaml
+-   uses: actions/checkout@v4
+
+-   uses: tada5hi/craneship@v4
+    with:
+        dockerFilePath: 'images/sandbox-node'
+        registryRepository: 'chamberu/sandbox-node'
+        registryTag: |
+            24
+            24-${{ github.sha }}
+        platforms: 'linux/amd64,linux/arm64'
+```
+
+`platforms` is comma or newline separated. When it is set:
+
+- The action registers **QEMU** emulators for the requested platforms
+  ([`docker/setup-qemu-action`](https://github.com/docker/setup-qemu-action)), so `RUN` steps of a
+  foreign platform execute on the runner.
+- The image is built with **`docker buildx build --platform ... --push`**, once, with every derived
+  tag. A multi-platform image cannot be loaded into the local daemon, so there is no separate tag and
+  push step and no local image is left behind.
+- If the current buildx builder uses the `docker` driver, which cannot hold a multi-platform image, a
+  `docker-container` builder is created and passed with `--builder`. It is never made the current
+  builder, so later steps are not affected. Any other current builder (e.g. one from
+  `docker/setup-buildx-action`) is used as is.
+- With `cleanup` enabled (the default) that builder is private to the run: it gets a unique name
+  (`craneship-<random>`) and is removed again afterwards, with its build cache. Jobs sharing one docker
+  daemon (e.g. on a self-hosted runner) therefore never remove a builder from under each other.
+- With `cleanup: 'false'` the builder is shared instead: it is named `craneship`, reused when an earlier
+  run left it behind, and kept, so its cache makes a later build fast.
+- A `docker-container` builder runs its own BuildKit and pulls every `FROM` image from a registry.
+  An image which exists only in the runner's local daemon (e.g. built by an earlier step) is not
+  visible to it, so push such a base image first.
+- Every run builds and pushes again, even for a ref built earlier in the same job: there is no local
+  image to find. With `cleanup: 'false'` the shared builder's cache makes such a repeat fast.
+- A ref which derives no tag (e.g. a git tag not matching `gitTagPrefix`) skips the build entirely,
+  with a warning.
+
+Without `platforms` nothing changes: the image is built with a plain `docker build`, then tagged and
+pushed. Outside GitHub Actions the CLI expects `docker buildx` to be available and, for foreign
+platforms, QEMU to be registered already (`docker run --privileged --rm tonistiigi/binfmt --install all`).
+
 ### Keep the built image for later steps
 
 ```yaml
@@ -219,7 +268,8 @@ With `gitTag: 'false'` a tag ref no longer contributes an image tag, so only `re
 -   run: docker images
 ```
 
-By default the locally built image is removed once every tag has been pushed.
+By default the locally built image is removed once every tag has been pushed. A multi-platform build
+leaves no local image, see [Multi-platform images](#multi-platform-images).
 
 ### Clone a private repository
 
@@ -259,8 +309,9 @@ An empty `node-version` skips the action's own `setup-node` step.
 | `dockerFileName`     | Name of the Dockerfile                                            | `Dockerfile`               |
 | `dockerFilePath`     | Relative path to the Dockerfile                                   | `''`                       |
 | `buildArgs`          | Additional build args (`KEY=VALUE`), one per line                 | `''`                       |
-| `cleanup`            | Delete the built image at the end                                 | `true`                     |
+| `cleanup`            | Delete the built image, or the created builder, at the end        | `true`                     |
 | `clone`              | Clone the repo at the ref instead of building the workspace       | `false`                    |
+| `platforms`          | Platforms to build with buildx (e.g. `linux/amd64,linux/arm64`)   | `''`                       |
 | `gitTag`             | Create an image tag for a git tag                                 | `true`                     |
 | `gitTagPrefix`       | Only match git tags with this prefix                              | `''`                       |
 | `gitUser`            | User for cloning the repository                                   | `${{ github.actor }}`      |
@@ -309,6 +360,7 @@ npx craneship \
 Every flag defaults to the corresponding `GITHUB_*` environment variable (`GITHUB_REF`,
 `GITHUB_REPOSITORY`, `GITHUB_ACTOR`, `GITHUB_TOKEN`, …), so inside a workflow no flags are required.
 Boolean flags are negated with `--no-` (e.g. `--no-cleanup`, `--no-gitTag`).
+`--platforms linux/amd64,linux/arm64` switches to a [multi-platform build](#multi-platform-images).
 
 `--clone` is usually what you want outside a workflow: without it the CLI builds the current working
 directory, with it the repository is cloned at `--ref` into `.output` and built from there.
@@ -346,6 +398,8 @@ Swap in `MemoryDockerClient` / `MemoryGitClient` / `NoopLogger` to exercise it i
 
 - **Node.js** >= 22.0.0
 - The `docker` and `git` CLIs on `PATH` (both are preinstalled on GitHub runners)
+- With `platforms` set: `docker buildx` (preinstalled on GitHub runners) and, for foreign platforms
+  outside GitHub Actions, QEMU registered via binfmt (`docker run --privileged --rm tonistiigi/binfmt --install all`)
 
 ## License
 

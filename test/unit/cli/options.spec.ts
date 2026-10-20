@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOptionsFromArgs, toLines } from '../../../src/cli/index.ts';
+import { buildOptionsFromArgs, toLines, toList } from '../../../src/cli/index.ts';
 
 describe('src/cli/options.ts', () => {
     describe('toLines', () => {
@@ -17,6 +17,25 @@ describe('src/cli/options.ts', () => {
         });
     });
 
+    describe('toList', () => {
+        it('should split on commas', () => {
+            expect(toList('linux/amd64,linux/arm64')).toEqual(['linux/amd64', 'linux/arm64']);
+        });
+
+        it('should split on newlines and commas together and trim', () => {
+            expect(toList(' linux/amd64 , linux/arm64\r\nlinux/arm/v7\n\n,')).toEqual([
+                'linux/amd64',
+                'linux/arm64',
+                'linux/arm/v7',
+            ]);
+        });
+
+        it('should return an empty list for empty input', () => {
+            expect(toList('')).toEqual([]);
+            expect(toList(undefined)).toEqual([]);
+        });
+    });
+
     describe('buildOptionsFromArgs', () => {
         it('should apply defaults for omitted args', () => {
             const options = buildOptionsFromArgs({});
@@ -30,6 +49,13 @@ describe('src/cli/options.ts', () => {
             expect(options.cleanup).toBe(true);
             expect(options.gitTag).toBe(true);
             expect(options.clone).toBe(false);
+            expect(options.platforms).toEqual([]);
+        });
+
+        it('should split the platforms on commas and newlines', () => {
+            const options = buildOptionsFromArgs({ platforms: 'linux/amd64,linux/arm64\nlinux/arm/v7' });
+
+            expect(options.platforms).toEqual(['linux/amd64', 'linux/arm64', 'linux/arm/v7']);
         });
 
         it('should split the multi value args', () => {

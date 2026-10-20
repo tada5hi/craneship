@@ -48,6 +48,21 @@ export type Options = {
     clone: boolean,
 
     /**
+     * Target platforms (e.g. linux/amd64, linux/arm64).
+     *
+     * When set, the image is built with docker buildx for every platform
+     * and pushed under every derived tag straight from that build, since a
+     * multi-platform image cannot be loaded into the local daemon. With
+     * cleanup enabled, a builder created for the build is removed again.
+     *
+     * When empty, the image is built with a plain docker build, then
+     * tagged and pushed.
+     *
+     * Default: []
+     */
+    platforms?: string[],
+
+    /**
      * Whether to create an image tag for a git tag.
      *
      * Default: true
@@ -141,7 +156,8 @@ export type PublishContext = {
 
 export type PublishResult = {
     /**
-     * Local id the image was built under.
+     * Local id the image was built under. A multi-platform build is
+     * pushed without a local image, so it is not tagged with this id.
      */
     imageId: string,
 

@@ -6,6 +6,7 @@
  */
 
 export * from './cli.ts';
+export * from './constants.ts';
 export * from './memory.ts';
 export * from './types.ts';
 export * from './url.ts';
