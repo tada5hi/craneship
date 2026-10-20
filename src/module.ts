@@ -163,6 +163,9 @@ async function publishMultiPlatform(
     try {
         const builder = await docker.ensureMultiPlatformBuilder();
 
+        let buildFailed = false;
+        let buildError : unknown;
+
         try {
             logger.info(`Building for ${platforms.join(', ')} and pushing ${images.join(', ')}`);
 
@@ -175,13 +178,32 @@ async function publishMultiPlatform(
 
             result.built = true;
             result.images.push(...images);
-        } finally {
-            // cleanup removes what this run left behind: the builder it
-            // created (with its build cache), never one it found
-            if (options.cleanup && builder.created && builder.name) {
-                logger.info(`Removing builder ${builder.name}...`);
+        } catch (error) {
+            buildFailed = true;
+            buildError = error;
+        }
+
+        // cleanup removes what this run left behind: the builder it
+        // created (with its build cache), never one it found
+        if (options.cleanup && builder.created && builder.name) {
+            logger.info(`Removing builder ${builder.name}...`);
+
+            try {
                 await docker.removeBuilder(builder.name);
+            } catch (error) {
+                // a failing removal must not replace the build error,
+                // which is the one worth reporting
+                if (!buildFailed) {
+                    throw error;
+                }
+
+                const message = error instanceof Error ? error.message : `${error}`;
+                logger.warn(`The builder ${builder.name} could not be removed: ${message}`);
             }
+        }
+
+        if (buildFailed) {
+            throw buildError;
         }
     } finally {
         await docker.logout(options.registryHost);

@@ -10,6 +10,7 @@ import {
     NoopLogger,
 } from '../../src/core/index.ts';
 import { publish } from '../../src/module.ts';
+import type { ILogger } from '../../src/core/index.ts';
 import type { Options, PublishContext } from '../../src/types.ts';
 
 function buildOptions(extend: Partial<Options> = {}) : Options {
@@ -353,6 +354,54 @@ describe('src/module.ts', () => {
                 .rejects.toThrow('denied');
 
             expect(docker.removedBuilders).toEqual(['craneship']);
+            expect(docker.logouts).toEqual(['ghcr.io']);
+        });
+
+        it('should not name or remove a builder when none was created or named', async () => {
+            docker.ensureMultiPlatformBuilder = async () => ({ created: false });
+
+            await publish(buildOptions({ cleanup: true, platforms }), context);
+
+            expect(docker.multiPlatformBuilds).toHaveLength(1);
+            expect(docker.multiPlatformBuilds[0]).not.toHaveProperty('builder');
+            expect(docker.removedBuilders).toEqual([]);
+        });
+
+        it('should keep the build error when the builder removal fails too', async () => {
+            const warnings : string[] = [];
+            const logger : ILogger = {
+                debug: () => {},
+                info: () => {},
+                error: () => {},
+                warn: (message) => {
+                    warnings.push(message);
+                },
+            };
+
+            docker.buildAndPushImage = async () => {
+                throw new Error('denied');
+            };
+            docker.removeBuilder = async () => {
+                throw new Error('builder busy');
+            };
+
+            await expect(publish(buildOptions({ cleanup: true, platforms }), { ...context, logger }))
+                .rejects.toThrow('denied');
+
+            expect(warnings).toHaveLength(1);
+            expect(warnings[0]).toContain('craneship');
+            expect(warnings[0]).toContain('builder busy');
+            expect(docker.logouts).toEqual(['ghcr.io']);
+        });
+
+        it('should throw the builder removal error when the build succeeded', async () => {
+            docker.removeBuilder = async () => {
+                throw new Error('builder busy');
+            };
+
+            await expect(publish(buildOptions({ cleanup: true, platforms }), context))
+                .rejects.toThrow('builder busy');
+
             expect(docker.logouts).toEqual(['ghcr.io']);
         });
 
