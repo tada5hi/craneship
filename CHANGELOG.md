@@ -36,6 +36,13 @@
 
 * clone repo in output directory ([6286c63](https://github.com/Tada5hi/action-docker-release/commit/6286c6378934f2b019e7988f9f77b537dd850937))
 
+## [4.1.0](https://github.com/tada5hi/craneship/compare/v4.0.0...v4.1.0) (2026-10-20)
+
+
+### Features
+
+* build multi-platform images with docker buildx ([#188](https://github.com/tada5hi/craneship/issues/188)) ([1c0232b](https://github.com/tada5hi/craneship/commit/1c0232b0ac6535d84614d915a70bee75a19b5b77))
+
 ## [4.0.0](https://github.com/tada5hi/dimp/compare/v3.4.0...v4.0.0) (2026-08-04)
 
 
