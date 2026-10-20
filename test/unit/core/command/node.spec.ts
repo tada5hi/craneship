@@ -61,7 +61,11 @@ describe('src/core/command/node.ts', () => {
 
     it('should stream output while it runs', async () => {
         const chunks : string[] = [];
-        const runner = new NodeCommandRunner({ stream: (chunk) => chunks.push(chunk) });
+        const runner = new NodeCommandRunner({
+            stream: (chunk) => {
+                chunks.push(chunk);
+            },
+        });
 
         await runner.run(NODE, ['-e', 'process.stdout.write("streamed")']);
 
