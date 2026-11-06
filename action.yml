@@ -87,7 +87,10 @@ runs:
         -   name: Resolve runtime Node.js
             id: runtime
             shell: bash
-            run: echo "node=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
+            run: |
+                runtime_node=$(node -p 'process.execPath')
+                echo "node=$runtime_node" >> "$GITHUB_OUTPUT"
+                echo "directory=$(dirname "$runtime_node")" >> "$GITHUB_OUTPUT"
 
         -   name: Setup build Node.js
             uses: actions/setup-node@v4
@@ -103,6 +106,12 @@ runs:
             shell: bash
             run: npm run build
             working-directory: ${{ github.action_path }}
+
+        -   name: Restore runtime Node.js
+            shell: bash
+            env:
+                RUNTIME_DIRECTORY: ${{ steps.runtime.outputs.directory }}
+            run: echo "$RUNTIME_DIRECTORY" >> "$GITHUB_PATH"
 
         -   name: Resolve platforms
             id: platforms
