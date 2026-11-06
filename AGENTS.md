@@ -24,7 +24,8 @@ npx tsc --noEmit       # standalone type check (there is no typecheck script)
 node dist/cli.mjs --help
 ```
 
-- **Node.js**: `>=22.0.0` (CI and the action default to 24)
+- **Node.js (package runtime)**: `>=22.0.0` (CI and the action default to 24)
+- **Node.js (development tooling)**: `^24.11.0 || >=26.0.0`; `.nvmrc` selects Node 24.
 - **Package manager**: npm (`package-lock.json` is committed; use `npm ci` in CI)
 - **Build tool**: [tsdown](https://tsdown.dev), single package, no workspaces
 - **CLI framework**: [citty](https://github.com/unjs/citty), same shape as `authup/authup` and `privateaim/hub`
