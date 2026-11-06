@@ -9,6 +9,7 @@ import type { GithubRef } from '../types.ts';
 
 export function parseGitHubRef(ref: string) : GithubRef | undefined {
     const parts = ref.split('/');
+
     if (parts.length < 3 || parts[0] !== 'refs') {
         return undefined;
     }

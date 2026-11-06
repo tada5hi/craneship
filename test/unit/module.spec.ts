@@ -1,8 +1,8 @@
-import { 
-    beforeEach, 
-    describe, 
-    expect, 
-    it, 
+import {
+    beforeEach,
+    describe,
+    expect,
+    it,
 } from 'vitest';
 import {
     MemoryDockerClient,
@@ -51,9 +51,9 @@ describe('src/module.ts', () => {
         docker = new MemoryDockerClient();
         git = new MemoryGitClient();
         context = {
-            docker, 
-            git, 
-            logger: new NoopLogger(), 
+            docker,
+            git,
+            logger: new NoopLogger(),
         };
     });
 
@@ -197,6 +197,7 @@ describe('src/module.ts', () => {
 
     it('should log out even when a push fails', async () => {
         const failing = new MemoryDockerClient();
+
         failing.pushImage = async () => {
             throw new Error('denied');
         };

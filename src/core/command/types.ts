@@ -5,6 +5,10 @@
  * view the LICENSE file that was distributed with this source code.
  */
 
+
+
+
+
 export type CommandOptions = {
     /**
      * Working directory to run the command in.
@@ -34,3 +38,20 @@ export interface ICommandRunner {
      */
     run(command: string, args: string[], options?: CommandOptions) : Promise<CommandResult>;
 }
+
+export type MemoryCommandCall = {
+    command: string,
+
+    args: string[],
+
+    options: CommandOptions
+};
+
+export type MemoryCommandResponse = Partial<CommandResult>;
+
+export type NodeCommandRunnerOptions = {
+    /**
+     * Mirror stdout/stderr of the spawned process while it runs.
+     */
+    stream?: (chunk: string) => void
+};

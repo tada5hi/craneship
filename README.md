@@ -300,7 +300,7 @@ tokens containing `@`, `:` or `/` work.
         node-version: ''
 ```
 
-An empty `node-version` skips the action's own `setup-node` step.
+An empty `node-version` reuses the existing Node installation to run the CLI. The action builds its bundled CLI with Node 24 separately, preserving the selected runtime.
 
 ## Inputs
 

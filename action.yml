@@ -83,6 +83,21 @@ runs:
             uses: actions/setup-node@v4
             with:
                 node-version: ${{ inputs.node-version }}
+                check-latest: true
+
+        -   name: Resolve runtime Node.js
+            id: runtime
+            shell: bash
+            run: |
+                runtime_node=$(node -p 'process.execPath')
+                echo "node=$runtime_node" >> "$GITHUB_OUTPUT"
+                echo "directory=$(dirname "$runtime_node")" >> "$GITHUB_OUTPUT"
+
+        -   name: Setup build Node.js
+            uses: actions/setup-node@v4
+            with:
+                node-version: '24'
+                check-latest: true
 
         -   name: Install dependencies
             shell: bash
@@ -93,6 +108,13 @@ runs:
             shell: bash
             run: npm run build
             working-directory: ${{ github.action_path }}
+
+        -   name: Restore runtime Node.js
+            if: ${{ always() && steps.runtime.outputs.directory != '' }}
+            shell: bash
+            env:
+                RUNTIME_DIRECTORY: ${{ steps.runtime.outputs.directory }}
+            run: echo "$RUNTIME_DIRECTORY" >> "$GITHUB_PATH"
 
         -   name: Resolve platforms
             id: platforms
@@ -135,6 +157,7 @@ runs:
                 INPUT_REGISTRY_REPOSITORY: ${{ inputs.registryRepository }}
                 INPUT_REGISTRY_TAG: ${{ inputs.registryTag }}
                 ACTION_PATH: ${{ github.action_path }}
+                RUNTIME_NODE: ${{ steps.runtime.outputs.node }}
             run: |
                 set -euo pipefail
 
@@ -157,4 +180,4 @@ runs:
                 if [ "$INPUT_GIT_TAG" = "false" ]; then args+=(--no-gitTag); fi
                 if [ "$INPUT_CLONE" = "true" ]; then args+=(--clone); fi
 
-                node "${ACTION_PATH}/dist/cli.mjs" "${args[@]}"
+                "${RUNTIME_NODE}" "${ACTION_PATH}/dist/cli.mjs" "${args[@]}"

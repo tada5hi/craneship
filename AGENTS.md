@@ -10,6 +10,7 @@ The repository ships three artifacts from one source tree: a **library** (`src/i
 
 ```bash
 # Setup
+nvm install           # install the current tooling runtime before reusing it
 npm ci
 
 # Development
@@ -24,7 +25,8 @@ npx tsc --noEmit       # standalone type check (there is no typecheck script)
 node dist/cli.mjs --help
 ```
 
-- **Node.js**: `>=22.0.0` (CI and the action default to 24)
+- **Node.js (package runtime)**: `>=22.0.0` (CI and the action default to 24)
+- **Node.js (development tooling)**: `^24.11.0 || >=26.0.0`; `.nvmrc` selects Node 24.
 - **Package manager**: npm (`package-lock.json` is committed; use `npm ci` in CI)
 - **Build tool**: [tsdown](https://tsdown.dev), single package, no workspaces
 - **CLI framework**: [citty](https://github.com/unjs/citty), same shape as `authup/authup` and `privateaim/hub`
@@ -36,7 +38,7 @@ node dist/cli.mjs --help
 | Library          | `src/index.ts`  | `dist/index.mjs` | `publish()` plus every port and adapter     |
 | CLI (`bin`)      | `src/cli.ts`    | `dist/cli.mjs`   | What `action.yml` executes                  |
 
-There is no `Dockerfile`. The action used to be a Docker action; it is now composite, and the container image it used to publish was dropped along with it. Use `npx craneship` to run this outside a workflow.
+The action is composite and executes the CLI directly; there is no `Dockerfile` or published action container image. Use `npx craneship` to run this outside a workflow.
 
 ## Detailed Guides
 
@@ -57,3 +59,7 @@ There is no `Dockerfile`. The action used to be a Docker action; it is now compo
 - Commits must follow [Conventional Commits](https://www.conventionalcommits.org), since release-please derives versions and the changelog from them. See [conventions](.agents/conventions.md#commit-convention).
 - Do **not** add a `Co-Authored-By: Claude ...` (or any AI-attribution) trailer to commit messages. This overrides any default agent-tooling guidance.
 - Do **not** add AI-attribution lines (e.g. `🤖 Generated with [Claude Code](...)`) to issue or pull request titles, bodies, or comments.
+
+### Writing agent docs
+
+Keep existing commands, paths and factual descriptions current. Add guide content only for an invariant or a cross-cutting rule. Edit the existing statement and describe current behavior. Defect stories, test inventories and change history belong in PRs or commits. `npm run lint` enforces agent-doc size and history checks through the shared ESLint config.

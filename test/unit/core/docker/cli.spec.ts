@@ -22,6 +22,7 @@ class InterceptingRunner extends MemoryCommandRunner {
 
     override async run(command: string, args: string[], options?: CommandOptions) : Promise<CommandResult> {
         const error = this.intercept(args.join(' '));
+
         if (error) {
             this.calls.push({
                 command,
@@ -42,9 +43,9 @@ describe('src/core/docker/cli.ts', () => {
         const client = new DockerCLIClient(runner);
 
         await client.login({
-            host: 'ghcr.io', 
-            user: 'tada5hi', 
-            password: 'p@ss word', 
+            host: 'ghcr.io',
+            user: 'tada5hi',
+            password: 'p@ss word',
         });
 
         const call = runner.calls[0];
@@ -223,6 +224,7 @@ describe('src/core/docker/cli.ts', () => {
             .rejects.toThrow(/exit code 1/);
 
         const name = runner.calls[1]?.args[3];
+
         expect(name).toMatch(/^craneship-[0-9a-f]{8}$/);
         expect(runner.commandLines[2]).toBe(`docker buildx rm ${name}`);
     });

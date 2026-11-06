@@ -107,3 +107,15 @@ export interface IDockerClient {
      */
     buildAndPushImage(options: MultiPlatformBuildOptions) : Promise<void>;
 }
+
+
+
+export type ImageUrlBuildContext = {
+    host: string,
+
+    owner: string,
+
+    name: string,
+
+    tag: string
+};

@@ -5,15 +5,9 @@
  * view the LICENSE file that was distributed with this source code.
  */
 
-export type ImageUrlBuildContext = {
-    host: string,
 
-    owner: string,
 
-    name: string,
-
-    tag: string
-};
+import type { ImageUrlBuildContext } from './types';
 
 export function buildDockerImageURL(context: ImageUrlBuildContext) : string;
 export function buildDockerImageURL(image: string, tag?: string) : string;
@@ -42,3 +36,4 @@ export function buildDockerImageURL(context: ImageUrlBuildContext | string, tag?
         `@${tag}` :
         `:${tag}`);
 }
+export type { ImageUrlBuildContext };

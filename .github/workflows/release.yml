@@ -27,14 +27,14 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-            -   uses: googleapis/release-please-action@v4
+            -   uses: googleapis/release-please-action@v5
                 id: release
                 with:
                     token: ${{ secrets.GITHUB_TOKEN }}
 
             -   name: Checkout
                 if: steps.release.outputs.releases_created == 'true'
-                uses: actions/checkout@v4
+                uses: actions/checkout@v6
                 with:
                     fetch-depth: 0
 
@@ -70,6 +70,6 @@ jobs:
 
             -   name: Publish
                 if: steps.release.outputs.releases_created == 'true'
-                uses: tada5hi/monoship@v2
+                uses: tada5hi/monoship@v2.2.1
                 with:
                     token: ${{ secrets.NPM_TOKEN }}
