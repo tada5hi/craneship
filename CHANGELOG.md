@@ -36,6 +36,13 @@
 
 * clone repo in output directory ([6286c63](https://github.com/Tada5hi/action-docker-release/commit/6286c6378934f2b019e7988f9f77b537dd850937))
 
+## [4.1.1](https://github.com/tada5hi/craneship/compare/v4.1.0...v4.1.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** bump the minorandpatch group across 1 directory with 7 updates ([#195](https://github.com/tada5hi/craneship/issues/195)) ([860cf9a](https://github.com/tada5hi/craneship/commit/860cf9a9860169ff3c109331c9c3ca5b1f764d4a))
+
 ## [4.1.0](https://github.com/tada5hi/craneship/compare/v4.0.0...v4.1.0) (2026-10-20)
 
 
