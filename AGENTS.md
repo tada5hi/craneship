@@ -1,7 +1,5 @@
 <!-- NOTE: Keep this file and all corresponding files in the .agents directory updated as the project evolves. When making architectural changes, adding new patterns, or discovering important conventions, update the relevant sections. -->
 
-Use this guide as the entry point. Read linked guides on demand before changing their areas.
-
 # craneship: Agent Guide
 
 A GitHub Action **and** CLI which builds a docker image from a repository at a given git ref, then tags and pushes it under every tag that ref implies (`refs/tags/v1.2.3` → `1.2.3`, monorepo tags like `some-package@v1.2.3` → `1.2.3`, plus any explicit `registryTag`). With `platforms` set it builds for every platform with `docker buildx` and pushes every tag straight from that build.
