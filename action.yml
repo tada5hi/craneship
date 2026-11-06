@@ -83,6 +83,7 @@ runs:
             uses: actions/setup-node@v4
             with:
                 node-version: ${{ inputs.node-version }}
+                check-latest: true
 
         -   name: Resolve runtime Node.js
             id: runtime
@@ -96,6 +97,7 @@ runs:
             uses: actions/setup-node@v4
             with:
                 node-version: '24'
+                check-latest: true
 
         -   name: Install dependencies
             shell: bash

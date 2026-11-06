@@ -87,15 +87,17 @@ jobs:
         runs-on: ubuntu-latest
         strategy:
             matrix:
-                node: ['22.0.0', '22']
+                node: ['22']
         steps:
             -   uses: actions/checkout@v6
             -   uses: actions/setup-node@v4
                 with:
                     node-version: '24'
+                    check-latest: true
             -   run: npm ci --ignore-scripts
             -   run: npm run build
             -   uses: actions/setup-node@v4
                 with:
                     node-version: ${{ matrix.node }}
+                    check-latest: true
             -   run: node dist/cli.mjs --help
