@@ -71,9 +71,9 @@ async function publishSinglePlatform(
 ) : Promise<PublishResult> {
     const { docker, logger } = context;
     const {
-        imageId, 
-        images, 
-        build, 
+        imageId,
+        images,
+        build,
     } = input;
 
     const imageExists = await docker.imageExists(imageId);
@@ -200,6 +200,7 @@ async function publishMultiPlatform(
                 }
 
                 const message = error instanceof Error ? error.message : `${error}`;
+
                 logger.warn(`The builder ${builder.name} could not be removed: ${message}`);
             }
         }
@@ -223,6 +224,7 @@ export async function publish(
     logger.info('Booting...');
 
     const ref = parseGitHubRef(options.ref);
+
     if (!ref) {
         throw new Error(`The git ref ${options.ref} could not be parsed.`);
     }
@@ -260,14 +262,17 @@ export async function publish(
         .map((tag) => buildDockerImageURL(imageBase, tag));
 
     let cwd = source;
+
     if (options.dockerFilePath.length > 0) {
         cwd = path.join(cwd, options.dockerFilePath);
     }
 
     const labels : Record<string, string> = {};
+
     if (options.runId) {
         labels.runId = options.runId;
     }
+
     if (options.runNumber) {
         labels.runNumber = options.runNumber;
     }

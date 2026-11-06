@@ -15,7 +15,9 @@ import {
 import type { Options } from '../types.ts';
 import { toBoolean } from '../utils/index.ts';
 
-export type PublishCommandArgs = Record<string, unknown>;
+import type { PublishCommandArgs } from './types';
+
+
 
 function toStringValue(input: unknown, fallback = '') : string {
     if (typeof input === 'string') {
@@ -57,6 +59,7 @@ export function toList(input: unknown) : string[] {
 
 export function buildOptionsFromArgs(args: PublishCommandArgs) : Options {
     const registryTags = toLines(args.registryTag);
+
     if (registryTags.length === 0) {
         registryTags.push(DEFAULT_REGISTRY_TAG);
     }
@@ -92,3 +95,4 @@ export function buildOptionsFromArgs(args: PublishCommandArgs) : Options {
         root: toStringValue(args.root) || process.cwd(),
     };
 }
+export type { PublishCommandArgs };

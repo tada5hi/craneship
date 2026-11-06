@@ -13,12 +13,9 @@ import type {
     ICommandRunner,
 } from './types.ts';
 
-export type NodeCommandRunnerOptions = {
-    /**
-     * Mirror stdout/stderr of the spawned process while it runs.
-     */
-    stream?: (chunk: string) => void
-};
+import type { NodeCommandRunnerOptions } from './types';
+
+
 
 export class NodeCommandRunner implements ICommandRunner {
     protected options : NodeCommandRunnerOptions;
@@ -78,3 +75,4 @@ export class NodeCommandRunner implements ICommandRunner {
         });
     }
 }
+export type { NodeCommandRunnerOptions };

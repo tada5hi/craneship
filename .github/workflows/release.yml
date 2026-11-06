@@ -70,6 +70,6 @@ jobs:
 
             -   name: Publish
                 if: steps.release.outputs.releases_created == 'true'
-                uses: tada5hi/monoship@v2
+                uses: tada5hi/monoship@v2.2.1
                 with:
                     token: ${{ secrets.NPM_TOKEN }}

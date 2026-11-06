@@ -125,6 +125,7 @@ export class DockerCLIClient implements IDockerClient {
             // a concurrent run may have created it in the meantime; when
             // that cannot be told either, the create error is the one to report
             const exists = await this.builderExists(DOCKER_BUILDER_NAME).catch(() => false);
+
             if (!exists) {
                 throw error;
             }

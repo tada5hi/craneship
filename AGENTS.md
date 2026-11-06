@@ -36,7 +36,7 @@ node dist/cli.mjs --help
 | Library          | `src/index.ts`  | `dist/index.mjs` | `publish()` plus every port and adapter     |
 | CLI (`bin`)      | `src/cli.ts`    | `dist/cli.mjs`   | What `action.yml` executes                  |
 
-There is no `Dockerfile`. The action used to be a Docker action; it is now composite, and the container image it used to publish was dropped along with it. Use `npx craneship` to run this outside a workflow.
+The action is composite and executes the CLI directly; there is no `Dockerfile` or published action container image. Use `npx craneship` to run this outside a workflow.
 
 ## Detailed Guides
 

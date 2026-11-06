@@ -12,15 +12,11 @@ import type {
     ICommandRunner,
 } from './types.ts';
 
-export type MemoryCommandCall = {
-    command: string,
+import type { MemoryCommandCall, MemoryCommandResponse } from './types';
 
-    args: string[],
 
-    options: CommandOptions
-};
 
-export type MemoryCommandResponse = Partial<CommandResult>;
+
 
 /**
  * In memory command runner, recording every invocation instead of
@@ -51,17 +47,19 @@ export class MemoryCommandRunner implements ICommandRunner {
 
     async run(command: string, args: string[], options: CommandOptions = {}) : Promise<CommandResult> {
         this.calls.push({
-            command, 
-            args, 
-            options, 
+            command,
+            args,
+            options,
         });
 
         const line = [command, ...args].join(' ');
 
         let response : MemoryCommandResponse | undefined;
+
         for (const [prefix, value] of this.responses) {
             if (line.startsWith(prefix)) {
                 response = value;
+
                 break;
             }
         }
@@ -79,3 +77,4 @@ export class MemoryCommandRunner implements ICommandRunner {
         return result;
     }
 }
+export type { MemoryCommandCall, MemoryCommandResponse };

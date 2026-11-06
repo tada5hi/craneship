@@ -52,6 +52,7 @@ export function buildCloneURL(url: string, user?: string, password?: string) : s
     }
 
     const index = url.indexOf('://');
+
     if (index === -1) {
         return url;
     }
