@@ -101,3 +101,35 @@ jobs:
                     node-version: ${{ matrix.node }}
                     check-latest: true
             -   run: node dist/cli.mjs --help
+
+    action-runtime-failure:
+        name: Restore action runtime after build failure
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/checkout@v6
+            -   uses: actions/setup-node@v4
+                with:
+                    node-version: '22'
+                    check-latest: true
+            -   name: Capture caller runtime and force a build failure
+                run: |
+                    echo "EXPECTED_NODE=$(node -p 'process.execPath')" >> "$GITHUB_ENV"
+                    node <<'NODE'
+                    const fs = require('node:fs');
+                    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+                    pkg.scripts.build = "node -e \"require('node:fs').writeFileSync('.expected-build-failure', 'yes'); process.exit(23)\"";
+                    fs.writeFileSync('package.json', JSON.stringify(pkg));
+                    NODE
+            -   name: Run the real composite action
+                id: action
+                continue-on-error: true
+                uses: ./
+                with:
+                    node-version: ''
+            -   name: Assert failure and restored caller runtime
+                env:
+                    ACTION_OUTCOME: ${{ steps.action.outcome }}
+                run: |
+                    test -f .expected-build-failure
+                    test "$ACTION_OUTCOME" = failure
+                    test "$(node -p 'process.execPath')" = "$EXPECTED_NODE"

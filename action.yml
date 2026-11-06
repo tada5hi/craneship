@@ -110,6 +110,7 @@ runs:
             working-directory: ${{ github.action_path }}
 
         -   name: Restore runtime Node.js
+            if: ${{ always() && steps.runtime.outputs.directory != '' }}
             shell: bash
             env:
                 RUNTIME_DIRECTORY: ${{ steps.runtime.outputs.directory }}
