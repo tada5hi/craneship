@@ -84,6 +84,16 @@ runs:
             with:
                 node-version: ${{ inputs.node-version }}
 
+        -   name: Resolve runtime Node.js
+            id: runtime
+            shell: bash
+            run: echo "node=$(node -p 'process.execPath')" >> "$GITHUB_OUTPUT"
+
+        -   name: Setup build Node.js
+            uses: actions/setup-node@v4
+            with:
+                node-version: '24'
+
         -   name: Install dependencies
             shell: bash
             run: npm ci --ignore-scripts
@@ -135,6 +145,7 @@ runs:
                 INPUT_REGISTRY_REPOSITORY: ${{ inputs.registryRepository }}
                 INPUT_REGISTRY_TAG: ${{ inputs.registryTag }}
                 ACTION_PATH: ${{ github.action_path }}
+                RUNTIME_NODE: ${{ steps.runtime.outputs.node }}
             run: |
                 set -euo pipefail
 
@@ -157,4 +168,4 @@ runs:
                 if [ "$INPUT_GIT_TAG" = "false" ]; then args+=(--no-gitTag); fi
                 if [ "$INPUT_CLONE" = "true" ]; then args+=(--clone); fi
 
-                node "${ACTION_PATH}/dist/cli.mjs" "${args[@]}"
+                "${RUNTIME_NODE}" "${ACTION_PATH}/dist/cli.mjs" "${args[@]}"

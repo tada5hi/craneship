@@ -81,3 +81,21 @@ jobs:
             -   name: Run tests
                 run: |
                     npm run test:coverage
+
+    action-runtime:
+        name: Action runtime (Node ${{ matrix.node }})
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                node: ['22.0.0', '22']
+        steps:
+            -   uses: actions/checkout@v6
+            -   uses: actions/setup-node@v4
+                with:
+                    node-version: '24'
+            -   run: npm ci --ignore-scripts
+            -   run: npm run build
+            -   uses: actions/setup-node@v4
+                with:
+                    node-version: ${{ matrix.node }}
+            -   run: node dist/cli.mjs --help
