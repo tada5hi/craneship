@@ -137,7 +137,7 @@ Commits follow **[Conventional Commits](https://www.conventionalcommits.org)**, 
 
 - `fix:` → patch bump. `feat:` → minor bump. `!` or a `BREAKING CHANGE:` footer → major.
 - `build:`, `chore:`, `ci:`, `docs:`, `style:`, `refactor:`, `test:` → no release.
-- Dependabot uses `fix` for production deps and `build` for dev deps, with the scope included. Match that when bumping dependencies by hand (e.g. `build(deps-dev): bump vitest to v4`).
+- Dependabot uses `fix` for production deps and `build` for dev deps, with the scope included. Match that when bumping dependencies by hand (e.g. `build(deps-dev): bump vitest`).
 
 ## Release Process
 
@@ -164,3 +164,5 @@ Releases are never cut by hand.
 - Before adding new code, study the surrounding patterns, naming and structure, and stay consistent with them.
 - Keep `src/module.ts` free of concrete adapters. That constraint is what keeps the suite fast and daemon-free.
 - Prefer upgrading a shared `@tada5hi/*` config over adding a local rule override.
+
+The composite action builds with its tooling runtime and invokes the bundled CLI through the captured caller-selected Node executable. Keep an empty `node-version` input bound to the existing runner installation. The action-runtime CI jobs exercise the supported CLI runtime separately from the build.
